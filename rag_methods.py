@@ -15,6 +15,7 @@ from PyPDF2 import PdfReader
 from docx import Document as DocxDocument
 
 
+
 os.environ["USER_AGENT"] = "YourAppName/1.0"
 # Load SpaCy model for semantic splitting
 nlp = spacy.load("en_core_web_sm")

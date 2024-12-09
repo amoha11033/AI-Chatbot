@@ -1,8 +1,13 @@
+__import__('pysqlite3')
+import sys
+sys.module['sqlite3'] = sys.modules.pop('pysqlite3')
+
 import streamlit as st
 import os
 import dotenv
 import uuid
 from langchain_openai import ChatOpenAI
+
 
 # Importing necessary functions and classes from rag_methods
 from rag_methods import (
@@ -14,6 +19,8 @@ from langchain_anthropic import ChatAnthropic
 from langchain.schema import HumanMessage, AIMessage
 
 dotenv.load_dotenv()
+
+
 
 MODELS = [
     "anthropic/claude-3-5-haiku-20241022",
