@@ -1,10 +1,13 @@
-# Python virtual environment
+# Virtual environment
 venv/
-*.pyc
-__pycache__/
-
-# Environment files
 .env
 
-# Streamlit deployment cache
-.streamlit/
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+
+# Ignore Chroma vector database
+chroma_db/
