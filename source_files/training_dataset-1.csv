@@ -1,0 +1,71 @@
+id,Question,Answer
+1,Axent,Axent Global Company
+2,QFES,Queensland Fire and Emergency Service
+3,RFSNSW,New South Wales Rural Fire  Services
+4,TMR,department of Transport and Main Roads
+5,BCC,Brisbane City Council
+6,How many products does Axent have,"Axent has over 10,000 managed assets across the country."
+7,What is Axent,"Axent is a premier Australian electronic engineering company, specialising in the design, manufacture, installation and support of visual communication systems."
+8,What are Axent's main products?,"Axent specializes in designing and manufacturing innovative road and safety digital signage, including speed, bicycle, and wildlife awareness signs, school zone signs, fire danger rating signs, variable messaging signs, service station indicators, carpark displays, variable speed limit signs, passenger information displays, and sporting scoreboards."
+9,When was Axent established?,Axent was established in 1984.
+10,What industries does Axent serve?,"Axent provides specialist services to government departments, councils, and major blue-chip Australian companies."
+11,What is Axent's slogan?,Innovative solutions connecting Australia
+12,Where is Axent's Melbourne HQ located?,"Axent's Melbourne HQ is located at 3 Torteval Place, Clayton VIC 3168."
+13,Where is Axent's Queensland office located?,"Axent's Queensland office is located at 20 Transport Street, Yatala QLD 4207."
+14,What is Axent's contact number?,Axent's phone number is 13AXENT (1329368).
+15,here are Axent's products made?,"Axent's products are designed, produced, manufactured, and supported in Australia."
+16,Are Axent products durable?,All of Axent's systems are built to withstand all weather and light conditions for long-lasting performance.
+17,Is Axent engineering?,Axent's team is highly experienced across a wide range of industries and engineering disciplines.
+18,Who are Axents main clients?,We work with local governments and businesses to create innovative electronic products.
+19,Do Axent offer software services?,Axent offers a comprehensive development service for custom software and IoT cloud applications.
+20,What manufacturing capabilities does Axent have?,"Axent provides design, prototyping, testing, and manufacturing of proprietary electrical systems and metal sheet components using state-of-the-art SMT lines, industrial routers, printers, brake presses, and laser cutters."
+21,Does Axent offer installation and maintenance services?,Axent’s engineers and civil service personnel provide round-the-clock support for efficient and timely installation and maintenance.
+22,SAMS,Speed Awareness Monitoring Signs
+23,What is SAMS?,"SAMS is a radar LED speed sign that helps reduce vehicle speeding in residential neighborhoods, school zones, and other areas where speeding is a concern."
+24,What are SAMS dimensions?,SAMS dimensions are 650mm (W) x 1070mm (H) x 125mm (D).
+25,What are the dimensions of SAMS lighting matrix?,The LED lighting matrix for WAMS is 512mm (W) x 512mm (H).
+26,BAMS,Bicycle Awareness Monitoring Signs
+27,What is BAMS?,"BAMS is a radar speed LED sign designed to reduce speeding in low-speed zones, displaying the speed of bicycles, e-bikes, e-scooters, and vehicles."
+28,What are BAMS dimensions?,BAMS dimensions are 650mm (W) x 670mm (H) x 125mm (D).
+29,What are the dimensions of BAMS discrete display?,BAMS discrete displays are 360mm x 355mm for the top display and 390mm (W) x 168mm (H) for the bottom display.
+30,WAMS,Wildlife Awareness Monitoring Signs
+31,What is WAMS?,"WAMS are LED signs that alert drivers to wildlife presence, displaying a smiling koala face if drivers are below the speed limit and a ""slow down"" message if they exceed it."
+32,What are WAMS dimensions?,WAMS dimensions are 650mm (W) x 1070mm (H) x 125mm (D).
+33,What are the dimensions of WAMS lighting matrix?,The LED lighting matrix for WAMS is 512mm (W) x 512mm (H).
+34,ESZS,Electronic School Zone Signs
+35,What are ESZS?,ESZS are radar-activated flashing LED signs designed to increase visibility and encourage drivers to reduce speed in school zones.
+36,What are the dimensions of Type-A ESZS Sign?,600mm (W) x 1750mm (H) on one 65NB pole.
+37,What are the dimensions of Type-B ESZS Sign?,800mm (W) x 2400mm (H) on two 65NB poles.
+38,What are the dimensions of Type-C ESZS Sign?,1000mm (W) x 3000mm (H) on two 80NB poles
+39,PID,Passenger Information Display
+40,What are PIDs used for?,"PIDs are suitable for rail and transit, both on-board and at stations, platforms and designated passenger areas."
+41,What display types do PIDs come in?,"PIDs are available in LED, LCD, and ePaper options."
+42,What is the resolution of a PID LED matrix?,Passenger Information Display LED Matrix features an RBB 192x64p single- or double-sided display.
+43,What size is an LCD PID?,"Passenger Information Display LCDs are commonly 32-inch or 43-inch, but sizes are customisable to suit client needs."
+44,AFDRS,Australian Fire Danger Rating System
+45,How do fire signs work?,AFDRS display location specific fire risks using real-time data from the Bureau of Meteorology.
+46,What are AFDRS dimensions?,AFDRS dimensions are 1800mm (W) x 1585mm (H).
+47,What levels of fire risk do AFDRS display?,"Moderate (Plan and prepare), High (Be ready to act), Extreme (Take action now to protect life and property), Catastrophic (For your survival, leave bushfire risk areas), the white bar under Moderate indicates No Rating for days where no proactive action is required."
+48,Where are our AFDRS signs?,ADFRS systems are currently being used for Queensland Fire and Emergency Services (QFES) and New South Wales Rural Fire Service (NSWRFS).
+49,What is the green on an AFDRS sign?,"The green level represents a moderate fire risk, which advises people to plan and prepare."
+50,What is the amber or yellow on an AFDRS sign?,"The amber level represents a high fire risk, which advises people to be ready to act."
+51,What is the orange on an AFDRS sign?,"The orange level represents an extreme fire risk, which advises people to take action now to protect life and property."
+52,What is the red on an AFDRS sign?,"The red level represents a catastrophic fire risk, which advises people to leave bushfire risk areas."
+53,What is the white on an AFDRS sign?,The white bar under Moderate indicates No Rating for days where no proactive action is required.
+54,How much clearance do signs need from overhead lines?,"900mm vertical clearance and 300mm horizontal clearance for insulated lines, 3300mm vertical clearance and 1500mm horizontal clearance for uninsulated lines."
+55,How much clearance do signs need from driveways?,Signs need 2m clearance from driveways.
+56,How much clearance do signs need from footpaths?,"Signs need 0.3m clearance from the footpath, else increase sign height to give 2.5m ground clearance"
+57,How much clearance do signs need from the kerb?,Signs need a 0.3m clearance from the face of the kerb
+58,How much visibility is required for a sign?,At least 40m of visibility for approaching traffic is required.
+59,What angle is a solar panel?,Solar panel has clear view of sky for 30 degrees either side of North and above 30 degrees elevation.
+60,VMS,Variable Message Sign.
+61,What are the dimensions of a VMS Sign?,VMS sizes vary.
+62,VSLS,Variable Speed Limit Signs
+63,What are VSLS,"Axent offers a range of Variable Speed Limit Signs (VSLS) products that feature bright, full-colour LED displays for easy viewing. We currently have two main variations of VSLS in production for state school zones and local police agencies."
+64,What are the dimensions of a VSLS Sign?,VSLS sizes vary.
+65,What LEDs are used on our school zone signs?,Our ESZS systems utilise Surface Mount Device (SMD) LEDs.
+66,SSD,Service Station Displays.
+67,What are our service station displays?,Axent designs and manufactures Service Station Displays (SSD) to indicate real-time fuel prices.
+68,What was our first product?,"Axents first product featured sporting scoreboards that track runs, wickets, overs bowled, target score and time of day, making them an incredibly convenient tool for players and coaches."
+69,How many resistors are in an AG18022 controller?,There are 70 resistors in our AG18022 controller.
+70,How many capacitors are in an AG18022 controller?,There are 39 resistors in our AG18022 controller.
