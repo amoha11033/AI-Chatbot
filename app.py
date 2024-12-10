@@ -1,8 +1,17 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+
+
+
 import streamlit as st
 import os
 import dotenv
 import uuid
 from langchain_openai import ChatOpenAI
+
+
 
 
 # Importing necessary functions and classes from rag_methods
@@ -215,3 +224,4 @@ else:
 
             # Save the response in session state
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+
