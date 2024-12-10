@@ -9,7 +9,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from time import time
 import pandas as pd
 from langchain.schema import Document
-import spacy
 import logging
 from PyPDF2 import PdfReader
 from docx import Document as DocxDocument
@@ -18,7 +17,6 @@ from docx import Document as DocxDocument
 
 os.environ["USER_AGENT"] = "YourAppName/1.0"
 # Load SpaCy model for semantic splitting
-nlp = spacy.load("en_core_web_sm")
 
 dotenv.load_dotenv()
 
@@ -170,47 +168,31 @@ def load_doc_to_db():
 
 
 
-def _split_and_load_docs(docs, max_tokens=600, overlap_tokens=200):
+def _split_and_load_docs(docs, chunk_size=500, overlap_size=100):
     """
-    Split documents into token-based chunks with overlap and load them into the vector database.
+    Split documents into sequential chunks based on fixed size with optional overlap and load into the vector database.
     """
     chunks = []
 
     for doc in docs:
-        # Approximate token count: 4 characters ≈ 1 token
-        token_multiplier = 4
+        # Tokenize content into fixed-size chunks
+        token_multiplier = 4  # Approximation: 4 characters ≈ 1 token
+        max_char_count = chunk_size * token_multiplier
+        overlap_char_count = overlap_size * token_multiplier
 
-        # Break content into sentences
-        doc_nlp = nlp(doc.page_content)
-        sentences = [sentence.text for sentence in doc_nlp.sents]
+        text = doc.page_content
+        start = 0
 
-        current_chunk = []
-        current_chunk_size = 0
+        while start < len(text):
+            # End index for current chunk
+            end = start + max_char_count
+            chunks.append(text[start:end])
 
-        for sentence in sentences:
-            # Approximate the token count for the sentence
-            sentence_size = len(sentence) // token_multiplier
-
-            # Add sentence to the current chunk
-            if current_chunk_size + sentence_size > max_tokens:
-                # Save the current chunk if it's not empty
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-
-                # Start the next chunk with the overlap
-                overlap_start = max(0, len(current_chunk) - (overlap_tokens // token_multiplier))
-                current_chunk = current_chunk[overlap_start:]
-                current_chunk_size = sum(len(sent) // token_multiplier for sent in current_chunk)
-
-            current_chunk.append(sentence)
-            current_chunk_size += sentence_size
-
-        # Add the remaining chunk
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
+            # Move the start point with overlap
+            start += max_char_count - overlap_char_count
 
     # Filter out empty chunks
-    chunks = [chunk for chunk in chunks if chunk.strip()]
+    chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
 
     # Store chunks in session state for display
     if "chunked_knowledge" not in st.session_state:
@@ -218,7 +200,7 @@ def _split_and_load_docs(docs, max_tokens=600, overlap_tokens=200):
     st.session_state.chunked_knowledge.extend(chunks)
 
     # Create Document objects for each chunk
-    document_chunks = [Document(page_content=chunk) for chunk in chunks if chunk.strip()]
+    document_chunks = [Document(page_content=chunk) for chunk in chunks]
 
     # Check if vector_db is initialized
     if "vector_db" not in st.session_state or st.session_state.vector_db is None:
@@ -226,6 +208,7 @@ def _split_and_load_docs(docs, max_tokens=600, overlap_tokens=200):
     else:
         st.session_state.vector_db.add_documents(document_chunks)
         st.session_state.vector_db.persist()  # Persist changes to database
+
 
 
 
