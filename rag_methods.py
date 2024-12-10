@@ -168,7 +168,7 @@ def load_doc_to_db():
 
 
 
-def _split_and_load_docs(docs, chunk_size=500, overlap_size=100):
+def _split_and_load_docs(docs, chunk_size=400, overlap_size=200):
     """
     Split documents into sequential chunks based on fixed size with optional overlap and load into the vector database.
     """
