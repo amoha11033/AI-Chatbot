@@ -121,14 +121,8 @@ def load_doc_to_db():
 
                     elif doc_file.name.endswith((".xls", ".xlsx")):
                         excel_data = pd.read_excel(file_path, engine="openpyxl")
-                        cleaned_data = clean_data(excel_data)
-
-                        # Chunk the data into smaller pieces
-                        chunk_size = 5  # Define number of rows per chunk
-                        for i in range(0, len(cleaned_data), chunk_size):
-                            chunk = cleaned_data.iloc[i:i + chunk_size]
-                            json_chunk = chunk.to_json(orient="records")
-                            docs.append(Document(page_content=json_chunk))
+                        raw_text = excel_data.to_string(index=False)  # Convert DataFrame to string
+                        docs.append(Document(page_content=raw_text))
 
                     elif doc_file.name.endswith(".csv"):
                         try:
@@ -138,14 +132,11 @@ def load_doc_to_db():
                                 result = chardet.detect(f.read(10000))
                             csv_data = pd.read_csv(file_path, encoding=result['encoding'])
 
-                        cleaned_data = clean_data(csv_data)
-
-                        # Chunk the data into smaller pieces
-                        chunk_size = 5  # Define number of rows per chunk
-                        for i in range(0, len(cleaned_data), chunk_size):
-                            chunk = cleaned_data.iloc[i:i + chunk_size]
-                            json_chunk = chunk.to_json(orient="records")
-                            docs.append(Document(page_content=json_chunk))
+                        raw_text = csv_data.to_string(index=False)  # Convert DataFrame to string
+                        docs.append(Document(page_content=raw_text))
+                    
+                    if docs:
+                        _split_and_load_docs(docs, chunk_size=1000, overlap_size=200)
 
                     else:
                         st.warning(f"Document type {doc_file.type} not supported.")
