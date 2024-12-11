@@ -174,18 +174,16 @@ else:
         llm_stream = ChatOpenAI(
             api_key=openai_api_key,
             model_name=st.session_state.model.split("/")[-1],
-            temperature=0.3,
+            temperature=0.1,
             streaming=True,
-            max_tokens_to_sample=500,  # Set max tokens for OpenAI
         )
 
     elif model_provider == "anthropic":
         llm_stream = ChatAnthropic(
             api_key = anthropic_api_key,
             model=st.session_state.model.split("/")[-1],
-            temperature=0.3,
+            temperature=0.1,
             streaming=True,
-            max_tokens_to_sample=500,  # Set max tokens for Anthropic
         )
 
     for message in st.session_state.messages:
