@@ -39,20 +39,18 @@ import logging
 def extract_text_from_pdf(file_path):
     """
     Extract text, headers, tables, and nested content from a PDF document,
-    properly distinguishing between headings and subheadings,
-    and return a plain text representation with formatted tables,
-    avoiding duplication and adding hierarchical levels.
+    properly distinguishing between headings and tables.
     """
     try:
         content = []
         hierarchy_stack = []  # Stack to track the current hierarchy
-        extracted_table_rows = set()  # To avoid duplicate content from tables
+        in_table = False  # Flag to check if content is part of a table
 
         def add_to_hierarchy(item, level):
             """Add a new item to the correct level in the hierarchy."""
             while len(hierarchy_stack) > level:
                 hierarchy_stack.pop()
-            
+
             # Add to the appropriate parent
             if hierarchy_stack:
                 if isinstance(hierarchy_stack[-1], dict):
@@ -60,7 +58,7 @@ def extract_text_from_pdf(file_path):
             else:
                 content.append(item)
 
-            if isinstance(item, dict):  # Only add dictionaries to the stack
+            if isinstance(item, dict):  # Only add headings or subheadings to the stack
                 hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
@@ -90,52 +88,38 @@ def extract_text_from_pdf(file_path):
                         continue  # Skip empty lines
 
                     # Check for major headings (uppercase or ending with colon)
-                    if line.isupper() or line.endswith(":"):
+                    if not in_table and (line.isupper() or line.endswith(":")):
                         major_heading = {"type": "heading", "text": line, "content": []}
                         add_to_hierarchy(major_heading, 1)
 
                     # Check for subheadings (title case or indented)
-                    elif line.istitle():
+                    elif not in_table and line.istitle():
                         subheading = {"type": "subheading", "text": line, "content": []}
                         add_to_hierarchy(subheading, 2)
 
-                    # Detect steps or ordered lists
-                    elif re.match(r'^\d+(\.\d+)*\s', line):
-                        step_text = line
-                        while lines:  # Combine multi-line steps
-                            next_line = lines.pop(0).strip()
-                            if not next_line or re.match(r'^\d+(\.\d+)*\s', next_line):
-                                lines.insert(0, next_line)
-                                break
-                            step_text += " " + next_line
-                        # Add the step to the nearest subheading or heading
-                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
-                            hierarchy_stack[-1]["content"].append(step_text)
-                        else:
-                            content.append(step_text)
-
                     # Default paragraph or content
-                    else:
+                    elif not in_table:
                         if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(line)
                         else:
                             content.append(line)
 
-                # Extract and format tables
+                # Extract and process tables
                 tables = page.extract_tables()
                 for table in tables:
                     if table:
-                        formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
+                        in_table = True  # Mark table start
+                        formatted_table = [
+                            [cell.strip() if cell else "" for cell in row] for row in table
+                        ]
 
-                        # Avoid adding duplicate rows as plain text
-                        for row in formatted_table:
-                            extracted_table_rows.add(tuple(row))  # Add to set for deduplication
-
-                        # Add table to the nearest heading or subheading
+                        # Add the table under the nearest heading or subheading
                         if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(formatted_table)
                         else:
                             content.append(formatted_table)
+
+                        in_table = False  # Reset table flag
 
         # Format the output as plain text
         plain_text_output = ""
