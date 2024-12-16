@@ -34,64 +34,73 @@ def get_current_date():
 
 import pdfplumber
 import json
-import logging
 import re
+import logging
 
 def extract_text_from_pdf(file_path):
     """
-    Extract structured text and tables from a PDF, associating tables with sections and processing them left-to-right.
+    Extract structured text and tables from a PDF, organizing them under a header tree (Heading 1, Heading 2, etc.).
     """
     try:
-        content = []
-        current_section = None
+        content = []  # Top-level content list
+        header_stack = []  # Stack to track current header tree
+
+        def add_to_tree(header_stack, item):
+            """Add an item to the appropriate level in the header tree."""
+            if not header_stack:  # No active headings
+                content.append(item)
+            else:
+                # Traverse the tree to the current active heading level
+                current_level = header_stack[-1]["content"]
+                current_level.append(item)
 
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
-                # Extract words and bounding box data
+                # Extract text and tables
                 page_text = page.extract_text()
                 tables = page.extract_tables()
 
-                # Initialize content for the page
-                if page_text:
-                    lines = page_text.splitlines()
-                else:
-                    lines = []
+                # Process text line by line
+                lines = page_text.splitlines() if page_text else []
 
-                # Process lines for headings and normal text
                 for line in lines:
                     text = line.strip()
 
-                    # Detect headings (customize pattern as needed)
+                    # Detect different levels of headings (e.g., Heading 1, Heading 2, etc.)
                     if re.match(r"^[A-Z\s\-]+$", text) and len(text.split()) <= 10:
-                        if current_section and "content" in current_section and current_section["content"]:
-                            content.append(current_section)
-                        current_section = {"type": "heading", "text": text, "content": []}
-                    elif current_section and text:
-                        # Add paragraphs or dot points to the current section
-                        if text.startswith(("-", "•", "*")):
-                            current_section["content"].append({"type": "dot_point", "text": text})
+                        # Determine heading level based on the length of indentation (customizable)
+                        heading_level = 1  # Default to Heading 1; can be refined with PDF-specific cues
+
+                        # Create the new heading structure
+                        new_heading = {"type": f"heading_{heading_level}", "text": text, "content": []}
+
+                        # Adjust the header stack
+                        while len(header_stack) >= heading_level:
+                            header_stack.pop()  # Remove higher-level headers
+                        if header_stack:
+                            header_stack[-1]["content"].append(new_heading)  # Add to parent
                         else:
-                            current_section["content"].append({"type": "text", "text": text})
+                            content.append(new_heading)  # Top-level heading
+
+                        # Push the new heading onto the stack
+                        header_stack.append(new_heading)
+
+                    elif text:  # Normal text or dot points
+                        item_type = "dot_point" if text.startswith(("-", "•", "*")) else "text"
+                        add_to_tree(header_stack, {"type": item_type, "text": text})
 
                 # Process tables left-to-right
                 for table in tables:
                     # Handle None values in table rows and flatten into a readable format
                     table_data = [" | ".join([str(cell) if cell is not None else "" for cell in row]) for row in table if any(row)]
-                    if current_section:
-                        current_section["content"].append({"type": "table", "rows": table_data})
-                    else:
-                        # If no current heading, append table as standalone content
-                        content.append({"type": "table", "rows": table_data})
-
-            # Append the last section if it exists
-            if current_section and "content" in current_section and current_section["content"]:
-                content.append(current_section)
+                    add_to_tree(header_stack, {"type": "table", "rows": table_data})
 
         return json.dumps(content, indent=4)
 
     except Exception as e:
         logging.error(f"Failed to extract structured content from PDF: {e}")
         return json.dumps({"error": str(e)}, indent=4)
+
 
 
 
