@@ -38,7 +38,7 @@ import logging
 def extract_text_from_pdf(file_path):
     """
     Extract headings, subheadings, plain text, and tables from a PDF,
-    classifying text based on font size.
+    explicitly treating font sizes 10, 11, and 12 as plain text.
     """
     try:
         content = []
@@ -56,7 +56,7 @@ def extract_text_from_pdf(file_path):
             else:
                 content.append(item)
 
-            if isinstance(item, dict):  # Only headings and subheadings are pushed to the stack
+            if isinstance(item, dict):
                 hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
@@ -65,7 +65,7 @@ def extract_text_from_pdf(file_path):
                 output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
                 for subitem in item.get("content", []):
                     output += format_hierarchy(subitem, level + 1)
-            elif isinstance(item, list):  # Handle tables
+            elif isinstance(item, list):  # Table
                 output = "  " * level + "Table:\n"
                 for row in item:
                     output += "  " * (level + 1) + " | ".join(row) + "\n"
@@ -78,7 +78,7 @@ def extract_text_from_pdf(file_path):
                 tables = page.extract_tables()
                 words = page.extract_words(extra_attrs=["size"])
 
-                # Step 1: Process tables first
+                # Step 1: Extract tables first
                 for table in tables:
                     if table:
                         formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
@@ -94,6 +94,9 @@ def extract_text_from_pdf(file_path):
 
                 # Step 2: Process words and classify based on font size
                 for word in words:
+                    if "text" not in word:  # Skip any malformed word entries
+                        continue
+                        
                     text = word["text"].strip()
                     size = word["size"]
 
