@@ -32,69 +32,38 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
-import pdfplumber
 import json
-import re
 import logging
 
 def extract_text_from_pdf(file_path):
-    """
-    Extract structured content from a PDF, including inferred headings, paragraphs, and tables.
-    """
+    """Extract text from a Word document, including headings, paragraphs, and tables."""
     try:
+        doc = PdfReader(file_path)
         content = []
         current_section = None
 
-        with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                # Extract text and tables
-                page_text = page.extract_text()
-                tables = page.extract_tables()
-
-                if page_text:
-                    lines = page_text.splitlines()
+        for paragraph in doc.paragraphs:
+            text = paragraph.text.strip()
+            if text:
+                if paragraph.style.name.startswith('Heading'):
+                    if current_section and "content" in current_section and current_section["content"]:
+                        content.append(current_section)
+                    current_section = {"type": "heading", "text": text, "content": []}
                 else:
-                    lines = []
-
-                # Process each line of text
-                for line in lines:
-                    text = line.strip()
-
-                    if not text:
-                        continue
-
-                    # Heuristic for identifying headings
-                    if re.match(r"^[A-Z\s\-]+$", text) and len(text.split()) <= 10:
-                        # If it's a heading, finish the previous section and start a new one
-                        if current_section and "content" in current_section and current_section["content"]:
-                            content.append(current_section)
-                        current_section = {"type": "heading", "text": text, "content": []}
+                    if not current_section:
+                        current_section = {"type": "text", "content": []}
+                    if current_section["type"] == "text":
+                        current_section["content"].append(text)
                     else:
-                        # Add text to the current section
-                        if not current_section:
-                            current_section = {"type": "text", "content": []}
-                        if current_section["type"] == "text":
-                            current_section["content"].append(text)
-                        elif current_section["type"] == "heading":
-                            current_section["content"].append({"type": "text", "text": text})
+                        content.append(current_section)
+                        current_section = {"type": "text", "content": [text]}
 
-                # Process tables
-                for table in tables:
-                    # Flatten table rows into readable format
-                    table_data = [" | ".join([str(cell) if cell else "" for cell in row]) for row in table if any(row)]
-                    if current_section:
-                        current_section["content"].append({"type": "table", "rows": table_data})
-                    else:
-                        content.append({"type": "table", "rows": table_data})
-
-        # Append the last section if any
         if current_section and "content" in current_section and current_section["content"]:
             content.append(current_section)
 
         return json.dumps(content, indent=4)
-
     except Exception as e:
-        logging.error(f"Failed to extract structured content from PDF: {e}")
+        logging.error(f"Error processing Word document {file_path}: {e}")
         return json.dumps({"error": str(e)}, indent=4)
 
 
