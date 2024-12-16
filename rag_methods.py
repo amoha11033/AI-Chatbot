@@ -34,23 +34,24 @@ def get_current_date():
 
 import pdfplumber
 import logging
+import statistics
 
 def extract_text_from_pdf(file_path):
     """
-    Extract headings, subheadings, plain text, and tables from a PDF,
-    explicitly treating font sizes 10, 11, and 12 as plain text.
+    Extract headings, subheadings, tables, and plain text from a PDF,
+    using font size thresholds and style to differentiate content.
     """
     try:
         content = []
         hierarchy_stack = []
-        active_heading = None  # Track the most recent heading
-        active_subheading = None  # Track the most recent subheading
+        active_heading = None
+        active_subheading = None
 
         def add_to_hierarchy(item, level):
-            """Add an item to the correct level in the content hierarchy."""
+            """Add an item to the correct hierarchy level."""
             while len(hierarchy_stack) > level:
                 hierarchy_stack.pop()
-            
+
             if hierarchy_stack:
                 hierarchy_stack[-1]["content"].append(item)
             else:
@@ -60,7 +61,7 @@ def extract_text_from_pdf(file_path):
                 hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
-            """Format the structured content into readable text output."""
+            """Format the structured content for readable output."""
             if isinstance(item, dict):
                 output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
                 for subitem in item.get("content", []):
@@ -69,43 +70,52 @@ def extract_text_from_pdf(file_path):
                 output = "  " * level + "Table:\n"
                 for row in item:
                     output += "  " * (level + 1) + " | ".join(row) + "\n"
-            else:  # Plain text
+            else:
                 output = "  " * level + f"- {item}\n"
             return output
 
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
+                words = page.extract_words(extra_attrs=["size", "fontname"])
                 tables = page.extract_tables()
-                words = page.extract_words(extra_attrs=["size"])
 
-                # Step 1: Extract tables first
+                # Step 1: Determine the average font size of the page
+                font_sizes = [word["size"] for word in words]
+                avg_font_size = statistics.mean(font_sizes) if font_sizes else 10
+                font_threshold = avg_font_size * 1.2  # Headings are 20% larger
+
+                # Step 2: Extract tables first
                 for table in tables:
                     if table:
                         formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
-                        table_item = {"type": "table", "content": formatted_table}
-
-                        # Attach the table under the current heading or subheading
                         if active_subheading:
-                            active_subheading["content"].append(table_item)
+                            active_subheading["content"].append({"type": "table", "content": formatted_table})
                         elif active_heading:
-                            active_heading["content"].append(table_item)
+                            active_heading["content"].append({"type": "table", "content": formatted_table})
                         else:
-                            content.append(table_item)
+                            content.append({"type": "table", "content": formatted_table})
 
-                # Step 2: Process words and classify based on font size
+                # Step 3: Process words and classify based on font size and style
                 for word in words:
-                    if "text" not in word:  # Skip any malformed word entries
-                        continue
-                        
                     text = word["text"].strip()
                     size = word["size"]
+                    fontname = word["fontname"].lower()
 
-                    if size > 12:  # Classify as a heading
-                        active_heading = {"type": "heading", "text": text, "content": []}
-                        add_to_hierarchy(active_heading, 1)
-                        active_subheading = None  # Reset subheading
+                    # Check for bold or italic style
+                    is_bold = "bold" in fontname
+                    is_large_font = size > font_threshold
 
-                    elif 10 <= size <= 12:  # Plain text
+                    # Classify headings and subheadings
+                    if is_large_font or is_bold:
+                        if size > font_threshold:
+                            active_heading = {"type": "heading", "text": text, "content": []}
+                            add_to_hierarchy(active_heading, 1)
+                            active_subheading = None
+                        else:
+                            active_subheading = {"type": "subheading", "text": text, "content": []}
+                            active_heading["content"].append(active_subheading)
+                    else:
+                        # Default plain text
                         if active_subheading:
                             active_subheading["content"].append(text)
                         elif active_heading:
@@ -113,14 +123,7 @@ def extract_text_from_pdf(file_path):
                         else:
                             content.append(text)
 
-                    else:  # Subheading (smaller but still larger than plain text)
-                        active_subheading = {"type": "subheading", "text": text, "content": []}
-                        if active_heading:
-                            active_heading["content"].append(active_subheading)
-                        else:
-                            content.append(active_subheading)
-
-        # Step 3: Format the content into readable output
+        # Step 4: Format the content
         formatted_output = ""
         for item in content:
             formatted_output += format_hierarchy(item)
