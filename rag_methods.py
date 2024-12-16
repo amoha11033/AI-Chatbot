@@ -76,11 +76,11 @@ def extract_text_from_pdf(file_path):
 
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
-                words = page.extract_words(extra_attrs=["size", "fontname"])
-                tables = page.extract_tables()
+                words = page.extract_words(extra_attrs=["size", "fontname"]) or []
+                tables = page.extract_tables() or []
 
                 # Step 1: Determine the average font size of the page
-                font_sizes = [word["size"] for word in words]
+                font_sizes = [word["size"] for word in words if "size" in word]
                 avg_font_size = statistics.mean(font_sizes) if font_sizes else 10
                 font_threshold = avg_font_size * 1.2  # Headings are 20% larger
 
@@ -97,9 +97,12 @@ def extract_text_from_pdf(file_path):
 
                 # Step 3: Process words and classify based on font size and style
                 for word in words:
+                    if "text" not in word or not word["text"]:  # Safeguard against malformed entries
+                        continue
+
                     text = word["text"].strip()
-                    size = word["size"]
-                    fontname = word["fontname"].lower()
+                    size = word.get("size", 0)  # Default size to 0 if missing
+                    fontname = word.get("fontname", "").lower()  # Safeguard if fontname is missing
 
                     # Check for bold or italic style
                     is_bold = "bold" in fontname
@@ -132,6 +135,7 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Error processing PDF document: {e}")
         return f"Error: {str(e)}"
+
 
 
 
