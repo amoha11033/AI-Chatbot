@@ -33,104 +33,98 @@ def get_current_date():
 
 
 import pdfplumber
-import re
 import logging
 
 def extract_text_from_pdf(file_path):
     """
-    Extract text, headers, tables, and nested content from a PDF document,
-    ensuring table content is processed first and plain text duplicates are skipped.
+    Extract headings, subheadings, plain text, and tables from a PDF,
+    classifying text based on font size.
     """
     try:
         content = []
-        hierarchy_stack = []  # Stack to track the current hierarchy
-        table_text_set = set()  # To store table content and prevent duplicates
+        hierarchy_stack = []
+        active_heading = None  # Track the most recent heading
+        active_subheading = None  # Track the most recent subheading
 
         def add_to_hierarchy(item, level):
-            """Add a new item to the correct level in the hierarchy."""
+            """Add an item to the correct level in the content hierarchy."""
             while len(hierarchy_stack) > level:
                 hierarchy_stack.pop()
-
-            # Add to the appropriate parent
+            
             if hierarchy_stack:
-                if isinstance(hierarchy_stack[-1], dict):
-                    hierarchy_stack[-1]["content"].append(item)
+                hierarchy_stack[-1]["content"].append(item)
             else:
                 content.append(item)
 
-            if isinstance(item, dict):  # Only add headings or subheadings to the stack
+            if isinstance(item, dict):  # Only headings and subheadings are pushed to the stack
                 hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
-            """Convert a structured item into a readable plain text format."""
+            """Format the structured content into readable text output."""
             if isinstance(item, dict):
                 output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
                 for subitem in item.get("content", []):
                     output += format_hierarchy(subitem, level + 1)
-            elif isinstance(item, list):  # Handle table formatting
+            elif isinstance(item, list):  # Handle tables
                 output = "  " * level + "Table:\n"
                 for row in item:
                     output += "  " * (level + 1) + " | ".join(row) + "\n"
-            else:
+            else:  # Plain text
                 output = "  " * level + f"- {item}\n"
             return output
 
         with pdfplumber.open(file_path) as pdf:
-            for page_num, page in enumerate(pdf.pages):
+            for page in pdf.pages:
                 tables = page.extract_tables()
+                words = page.extract_words(extra_attrs=["size"])
 
-                # Extract and process tables first
+                # Step 1: Process tables first
                 for table in tables:
                     if table:
-                        formatted_table = [
-                            [cell.strip() if cell else "" for cell in row] for row in table
-                        ]
-                        # Add table rows to the text set to avoid duplication
-                        for row in formatted_table:
-                            table_text_set.update(row)
-                        
-                        # Add the table under the nearest heading or subheading
-                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
-                            hierarchy_stack[-1]["content"].append(formatted_table)
+                        formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
+                        table_item = {"type": "table", "content": formatted_table}
+
+                        # Attach the table under the current heading or subheading
+                        if active_subheading:
+                            active_subheading["content"].append(table_item)
+                        elif active_heading:
+                            active_heading["content"].append(table_item)
                         else:
-                            content.append(formatted_table)
+                            content.append(table_item)
 
-                # Extract plain text lines
-                page_content = page.extract_text()
-                if not page_content:
-                    continue  # Skip pages with no text
+                # Step 2: Process words and classify based on font size
+                for word in words:
+                    text = word["text"].strip()
+                    size = word["size"]
 
-                lines = page_content.splitlines()
-                for line in lines:
-                    line = line.strip()
-                    if not line or line in table_text_set:
-                        continue  # Skip empty lines or duplicates from table
+                    if size > 12:  # Classify as a heading
+                        active_heading = {"type": "heading", "text": text, "content": []}
+                        add_to_hierarchy(active_heading, 1)
+                        active_subheading = None  # Reset subheading
 
-                    # Check for major headings (uppercase or ending with colon)
-                    if line.isupper() or line.endswith(":"):
-                        major_heading = {"type": "heading", "text": line, "content": []}
-                        add_to_hierarchy(major_heading, 1)
-
-                    # Check for subheadings (title case or indented)
-                    elif line.istitle():
-                        subheading = {"type": "subheading", "text": line, "content": []}
-                        add_to_hierarchy(subheading, 2)
-
-                    # Default paragraph or content
-                    else:
-                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
-                            hierarchy_stack[-1]["content"].append(line)
+                    elif 10 <= size <= 12:  # Plain text
+                        if active_subheading:
+                            active_subheading["content"].append(text)
+                        elif active_heading:
+                            active_heading["content"].append(text)
                         else:
-                            content.append(line)
+                            content.append(text)
 
-        # Format the output as plain text
-        plain_text_output = ""
+                    else:  # Subheading (smaller but still larger than plain text)
+                        active_subheading = {"type": "subheading", "text": text, "content": []}
+                        if active_heading:
+                            active_heading["content"].append(active_subheading)
+                        else:
+                            content.append(active_subheading)
+
+        # Step 3: Format the content into readable output
+        formatted_output = ""
         for item in content:
-            plain_text_output += format_hierarchy(item)
+            formatted_output += format_hierarchy(item)
 
-        return plain_text_output
+        return formatted_output
     except Exception as e:
-        logging.error(f"Error processing PDF document {file_path}: {e}")
+        logging.error(f"Error processing PDF document: {e}")
         return f"Error: {str(e)}"
 
 
