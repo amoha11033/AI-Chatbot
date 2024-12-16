@@ -40,11 +40,13 @@ def extract_text_from_pdf(file_path):
     """
     Extract text, headers, tables, and nested content from a PDF document,
     properly distinguishing between headings and subheadings,
-    and returning a plain text representation with formatted tables.
+    and return a plain text representation with formatted tables,
+    avoiding duplication and adding hierarchical levels.
     """
     try:
         content = []
         hierarchy_stack = []  # Stack to track the current hierarchy
+        extracted_table_rows = set()  # To avoid duplicate content from tables
 
         def add_to_hierarchy(item, level):
             """Add a new item to the correct level in the hierarchy."""
@@ -124,6 +126,12 @@ def extract_text_from_pdf(file_path):
                 for table in tables:
                     if table:
                         formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
+
+                        # Avoid adding duplicate rows as plain text
+                        for row in formatted_table:
+                            extracted_table_rows.add(tuple(row))  # Add to set for deduplication
+
+                        # Add table to the nearest heading or subheading
                         if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(formatted_table)
                         else:
@@ -138,7 +146,6 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Error processing PDF document {file_path}: {e}")
         return f"Error: {str(e)}"
-
 
 
 
