@@ -37,10 +37,9 @@ import json
 import logging
 import re
 
-def extract_text_and_tables_from_pdf(file_path):
+def extract_pdf_content_with_tables(file_path):
     """
-    Extract headings, text, and tables from a PDF in a structured format.
-    Tables are processed left to right, and grouped under relevant headings.
+    Extract structured text and tables from a PDF, associating tables with sections and processing them left-to-right.
     """
     try:
         content = []
@@ -48,27 +47,34 @@ def extract_text_and_tables_from_pdf(file_path):
 
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
-                # Extract tables from the page
+                # Extract words and bounding box data
+                page_text = page.extract_text()
+                words = page.extract_words()
                 tables = page.extract_tables()
 
-                # Extract lines of text from the page
-                page_text = page.extract_text()
-                lines = page_text.splitlines() if page_text else []
+                # Initialize content for the page
+                if page_text:
+                    lines = page_text.splitlines()
+                else:
+                    lines = []
 
-                # Process text and tables in order of appearance
+                # Process lines for headings and normal text
                 for line in lines:
                     text = line.strip()
 
-                    # Example heuristic for headings (all-uppercase with limited words)
-                    if text.isupper() and len(text.split()) < 10:
+                    # Detect headings (customize pattern as needed)
+                    if re.match(r"^[A-Z\s\-]+$", text) and len(text.split()) <= 10:
                         if current_section and "content" in current_section and current_section["content"]:
                             content.append(current_section)
                         current_section = {"type": "heading", "text": text, "content": []}
                     elif current_section and text:
-                        # Add text to the current section
-                        current_section["content"].append({"type": "text", "text": text})
+                        # Add paragraphs or dot points to the current section
+                        if text.startswith(("-", "•", "*")):
+                            current_section["content"].append({"type": "dot_point", "text": text})
+                        else:
+                            current_section["content"].append({"type": "text", "text": text})
 
-                # Process tables after text
+                # Process tables left-to-right
                 for table in tables:
                     # Flatten table rows into a readable format
                     table_data = [" | ".join(row) for row in table if any(row)]
@@ -85,8 +91,9 @@ def extract_text_and_tables_from_pdf(file_path):
         return json.dumps(content, indent=4)
 
     except Exception as e:
-        logging.error(f"Failed to extract text and tables from PDF: {e}")
+        logging.error(f"Failed to extract structured content from PDF: {e}")
         return json.dumps({"error": str(e)}, indent=4)
+
 
 
 
