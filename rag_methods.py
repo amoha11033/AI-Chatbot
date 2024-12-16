@@ -32,17 +32,51 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
-def extract_text_by_page(file_path):
+def extract_text_from_pdf(file_path):
     """
-    Extract text from a PDF file, page by page.
+    Extract text from a PDF file, including inferred sections like headings and paragraphs.
     """
     try:
         with open(file_path, 'rb') as pdf:
             reader = PdfReader(pdf)
-            return [page.extract_text().strip() for page in reader.pages]
+            content = []
+            current_section = None
+
+            for page in reader.pages:
+                page_text = page.extract_text().strip()
+
+                if not page_text:
+                    continue
+
+                # Split the text into lines for analysis
+                lines = page_text.splitlines()
+
+                for line in lines:
+                    text = line.strip()
+
+                    # Example heuristic: Treat all-uppercase lines as headings
+                    if text.isupper() and len(text.split()) < 10:
+                        if current_section and "content" in current_section and current_section["content"]:
+                            content.append(current_section)
+                        current_section = {"type": "heading", "text": text, "content": []}
+                    else:
+                        # Treat everything else as a paragraph
+                        if not current_section:
+                            current_section = {"type": "text", "content": []}
+                        if current_section["type"] == "text":
+                            current_section["content"].append(text)
+                        else:
+                            content.append(current_section)
+                            current_section = {"type": "text", "content": [text]}
+
+            if current_section and "content" in current_section and current_section["content"]:
+                content.append(current_section)
+
+            return json.dumps(content, indent=4)
     except Exception as e:
         logging.error(f"Failed to extract text from PDF: {e}")
-        return []
+        return json.dumps({"error": str(e)}, indent=4)
+
     
 
 def extract_text_from_docx(file_path):
@@ -119,7 +153,7 @@ def load_doc_to_db():
 
                 try:
                     if doc_file.type == "application/pdf":
-                        raw_pages = extract_text_by_page(file_path)
+                        raw_pages = extract_text_from_pdf(file_path)
                         raw_text = "\n\n".join(raw_pages)
                         docs.append(Document(page_content=raw_text))
 
