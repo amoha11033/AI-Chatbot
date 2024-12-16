@@ -32,35 +32,37 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
+import pdfplumber
+
 def extract_text_from_pdf(file_path):
     """
-    Extract text from a PDF file, including inferred sections like headings and paragraphs.
+    Extract text from a PDF file in a cleaner, structured format.
     """
     try:
-        with open(file_path, 'rb') as pdf:
-            reader = PdfReader(pdf)
-            content = []
-            current_section = None
+        content = []
+        current_section = None
 
-            for page in reader.pages:
-                page_text = page.extract_text().strip()
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                # Extract text by page, retaining layout if needed
+                page_text = page.extract_text()
 
                 if not page_text:
                     continue
 
-                # Split the text into lines for analysis
+                # Split the text into lines
                 lines = page_text.splitlines()
 
                 for line in lines:
                     text = line.strip()
 
-                    # Example heuristic: Treat all-uppercase lines as headings
+                    # Example heuristic for headings (all uppercase or bold)
                     if text.isupper() and len(text.split()) < 10:
                         if current_section and "content" in current_section and current_section["content"]:
                             content.append(current_section)
                         current_section = {"type": "heading", "text": text, "content": []}
                     else:
-                        # Treat everything else as a paragraph
+                        # Treat everything else as text
                         if not current_section:
                             current_section = {"type": "text", "content": []}
                         if current_section["type"] == "text":
@@ -69,13 +71,16 @@ def extract_text_from_pdf(file_path):
                             content.append(current_section)
                             current_section = {"type": "text", "content": [text]}
 
-            if current_section and "content" in current_section and current_section["content"]:
-                content.append(current_section)
+        # Add the last section if any
+        if current_section and "content" in current_section and current_section["content"]:
+            content.append(current_section)
 
-            return json.dumps(content, indent=4)
+        return json.dumps(content, indent=4)
+
     except Exception as e:
         logging.error(f"Failed to extract text from PDF: {e}")
         return json.dumps({"error": str(e)}, indent=4)
+
 
     
 
@@ -154,8 +159,10 @@ def load_doc_to_db():
                 try:
                     if doc_file.type == "application/pdf":
                         raw_pages = extract_text_from_pdf(file_path)
-                        raw_text = "\n\n".join(raw_pages)
-                        docs.append(Document(page_content=raw_text))
+                        if raw_pages.strip():
+                            docs.append(Document(page_content=raw_pages))
+                        else:
+                            st.warning(f"No content extracted from {doc_file.name}.")
 
                     elif doc_file.name.endswith(".docx"):
                         raw_text = extract_text_from_docx(file_path)
