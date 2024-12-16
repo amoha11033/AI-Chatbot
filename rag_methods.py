@@ -33,29 +33,33 @@ def get_current_date():
 
 
 import pdfplumber
-import json
 import re
+import json
 import logging
 
 def extract_text_from_pdf(file_path):
     """
-    Extract text, headers, subheadings, and content from a PDF document,
-    dynamically nesting headings based on their hierarchy.
+    Extract text, headers, and nested content from a PDF document,
+    properly distinguishing between headings and subheadings.
     """
     try:
         content = []
-        hierarchy_stack = []  # Stack to track the current hierarchy of headings
-        step_pattern = re.compile(r'^\d+\s')  # Detect lines starting with step numbers like "1 "
+        hierarchy_stack = []  # Stack to track the current hierarchy
 
-        def add_to_hierarchy(item):
+        def add_to_hierarchy(item, level):
             """Add a new item to the correct level in the hierarchy."""
-            while hierarchy_stack and hierarchy_stack[-1]["type"] == "subheading":
-                hierarchy_stack[-1]["content"].append(item)
-                return
+            # Remove items from the stack if they are deeper than the current level
+            while len(hierarchy_stack) > level:
+                hierarchy_stack.pop()
+            
+            # Add to the appropriate parent
             if hierarchy_stack:
                 hierarchy_stack[-1]["content"].append(item)
             else:
                 content.append(item)
+
+            # Add the current item to the stack
+            hierarchy_stack.append(item)
 
         with pdfplumber.open(file_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
@@ -71,66 +75,35 @@ def extract_text_from_pdf(file_path):
 
                     # Check for major headings (uppercase or ending with colon)
                     if line.isupper() or line.endswith(":"):
-                        # Create a new major heading
                         major_heading = {"type": "heading", "text": line, "content": []}
+                        add_to_hierarchy(major_heading, 1)
 
-                        # Pop smaller headings from the stack
-                        while hierarchy_stack and hierarchy_stack[-1]["type"] == "subheading":
-                            hierarchy_stack.pop()
-
-                        # Add the major heading to the stack and to the content
-                        add_to_hierarchy(major_heading)
-                        hierarchy_stack.append(major_heading)
-
-                    # Check for subheadings (title case or smaller hierarchy)
+                    # Check for subheadings (title case or indented)
                     elif line.istitle():
-                        # Create a subheading
                         subheading = {"type": "subheading", "text": line, "content": []}
+                        add_to_hierarchy(subheading, 2)
 
-                        # Add subheading under the last heading in the stack
-                        if hierarchy_stack:
-                            hierarchy_stack[-1]["content"].append(subheading)
-                        else:
-                            content.append(subheading)
-
-                        # Add subheading to the stack
-                        hierarchy_stack.append(subheading)
-
-                    # Detect steps using step numbers
-                    elif step_pattern.match(line):
+                    # Detect steps or ordered lists
+                    elif re.match(r'^\d+(\.\d+)*\s', line):
                         step_text = line
                         while lines:  # Combine multi-line steps
                             next_line = lines.pop(0).strip()
-                            if not next_line or step_pattern.match(next_line):
+                            if not next_line or re.match(r'^\d+(\.\d+)*\s', next_line):
                                 lines.insert(0, next_line)
                                 break
                             step_text += " " + next_line
-
-                        # Add step to the correct level
+                        # Add the step to the nearest subheading or heading
                         if hierarchy_stack:
                             hierarchy_stack[-1]["content"].append(step_text)
                         else:
                             content.append(step_text)
 
-                    # Default paragraph or text content
+                    # Default paragraph or content
                     else:
                         if hierarchy_stack:
                             hierarchy_stack[-1]["content"].append(line)
                         else:
                             content.append(line)
-
-                # Extract tables from the page
-                tables = page.extract_tables()
-                for table in tables:
-                    table_data = []
-                    for row in table:
-                        if row:  # Ensure row is not empty
-                            table_data.append([cell.strip() if cell else "" for cell in row])
-                    if table_data:
-                        if hierarchy_stack:
-                            hierarchy_stack[-1]["content"].append({"type": "table", "data": table_data})
-                        else:
-                            content.append({"type": "table", "data": table_data})
 
         return json.dumps(content, indent=4)
     except Exception as e:
