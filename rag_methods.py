@@ -9,20 +9,28 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from time import time
 import pandas as pd
 from langchain.schema import Document
-import spacy
 import logging
 from PyPDF2 import PdfReader
 from docx import Document as DocxDocument
+import json
 
 
 
 os.environ["USER_AGENT"] = "YourAppName/1.0"
 # Load SpaCy model for semantic splitting
-nlp = spacy.load("en_core_web_sm")
 
 dotenv.load_dotenv()
 
 DB_DOCS_LIMIT = 20  # Increase the document upload limit
+
+from datetime import datetime
+
+def get_current_date():
+    """
+    Returns the current date in a human-readable format.
+    """
+    return datetime.now().strftime("%B %d, %Y")
+
 
 def extract_text_by_page(file_path):
     """
@@ -35,156 +43,166 @@ def extract_text_by_page(file_path):
     except Exception as e:
         logging.error(f"Failed to extract text from PDF: {e}")
         return []
+    
 
 def extract_text_from_docx(file_path):
-    """
-    Extract text from a Word document, including headers, paragraphs, and tables.
-    """
+    """Extract text from a Word document, including headings, paragraphs, and tables."""
     try:
         doc = DocxDocument(file_path)
         content = []
+        current_section = None
 
-        # Extract paragraphs
         for paragraph in doc.paragraphs:
             text = paragraph.text.strip()
             if text:
-                content.append(text)
+                if paragraph.style.name.startswith('Heading'):
+                    if current_section and "content" in current_section and current_section["content"]:
+                        content.append(current_section)
+                    current_section = {"type": "heading", "text": text, "content": []}
+                else:
+                    if not current_section:
+                        current_section = {"type": "text", "content": []}
+                    if current_section["type"] == "text":
+                        current_section["content"].append(text)
+                    else:
+                        content.append(current_section)
+                        current_section = {"type": "text", "content": [text]}
 
-        # Extract tables
-        for table in doc.tables:
-            for row in table.rows:
-                row_data = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if row_data:
-                    content.append(" | ".join(row_data))  # Represent rows as pipe-separated
+        if current_section and "content" in current_section and current_section["content"]:
+            content.append(current_section)
 
-        return "\n\n".join(content)
-
+        return json.dumps(content, indent=4)
     except Exception as e:
         logging.error(f"Error processing Word document {file_path}: {e}")
-        return ""
+        return json.dumps({"error": str(e)}, indent=4)
 
 
+def clean_data(dataframe):
+    """
+    Clean the data in a Pandas DataFrame by:
+    - Dropping rows/columns with excessive NaN values.
+    - Filling NaN values with a placeholder.
+    - Removing duplicate rows.
+    - Resetting the index.
+    """
+    # Drop rows/columns with more than 50% NaN values
+    dataframe = dataframe.dropna(thresh=dataframe.shape[1] * 0.5, axis=0)
+    
+    # Fill remaining NaN values with placeholders
+    dataframe = dataframe.fillna("")
+    
+    # Drop duplicate rows
+    dataframe = dataframe.drop_duplicates()
+    
+    # Reset the index
+    dataframe.reset_index(drop=True, inplace=True)
+    
+    return dataframe
+
+import chardet
 
 def load_doc_to_db():
     """
     Handle document uploads. Use semantic chunking to split documents and store them in the vector database.
     """
-    # Check if there are uploaded documents in the session state
     if "rag_docs" in st.session_state and st.session_state.rag_docs:
         docs = []  # List to store processed documents
         unique_sources = set(st.session_state.rag_sources)  # Track uploaded files to avoid duplicates
 
-        # Iterate through the uploaded files
         for doc_file in st.session_state.rag_docs:
-            # Check if the file is unique and within the upload limit
             if doc_file.name not in unique_sources and len(unique_sources) < DB_DOCS_LIMIT:
-                # Ensure the directory for storing source files exists
                 os.makedirs("source_files", exist_ok=True)
                 file_path = f"./source_files/{doc_file.name}"
 
-                # Save the uploaded file to the local directory
                 with open(file_path, "wb") as file:
                     file.write(doc_file.read())
 
                 try:
-                    # Process PDF files
                     if doc_file.type == "application/pdf":
-                        raw_pages = extract_text_by_page(file_path)  # Extract text from each page
-                        raw_text = "\n\n".join(raw_pages)  # Combine text from all pages
-                        docs.append(Document(page_content=raw_text))  # Create a Document object
+                        raw_pages = extract_text_by_page(file_path)
+                        raw_text = "\n\n".join(raw_pages)
+                        docs.append(Document(page_content=raw_text))
 
-                    # Process Word documents
                     elif doc_file.name.endswith(".docx"):
-                        raw_text = extract_text_from_docx(file_path)  # Extract text from the Word document
-                        if raw_text.strip():  # Check if content was extracted
-                            docs.append(Document(page_content=raw_text))  # Add to docs
+                        raw_text = extract_text_from_docx(file_path)
+                        if raw_text.strip():
+                            docs.append(Document(page_content=raw_text))
                         else:
-                            st.warning(f"No content extracted from {doc_file.name}.")  # Warn if empty
+                            st.warning(f"No content extracted from {doc_file.name}.")
 
-                    # Process plain text and markdown files
                     elif doc_file.type in ["text/plain", "text/markdown"]:
                         with open(file_path, "r", encoding="utf-8") as file:
-                            raw_text = file.read()  # Read the file content
-                        docs.append(Document(page_content=raw_text))  # Add to docs
+                            raw_text = file.read()
+                        docs.append(Document(page_content=raw_text))
 
-                    # Process Excel files
                     elif doc_file.name.endswith((".xls", ".xlsx")):
-                        excel_data = pd.read_excel(file_path, engine="openpyxl")  # Load Excel data
-                        json_data = excel_data.to_json(orient="records")  # Convert to JSON format
-                        docs.append(Document(page_content=json_data))  # Add to docs
+                        excel_data = pd.read_excel(file_path, engine="openpyxl")
+                        cleaned_data = clean_data(excel_data)
+                        json_data = cleaned_data.to_json(orient="records")
+                        docs.append(Document(page_content=json_data))
 
-                    # Process CSV files
                     elif doc_file.name.endswith(".csv"):
-                        csv_data = pd.read_csv(file_path, encoding="utf-8")  # Load CSV data
-                        json_data = csv_data.to_json(orient="records")  # Convert to JSON format
-                        docs.append(Document(page_content=json_data))  # Add to docs
+                        try:
+                            csv_data = pd.read_csv(file_path, encoding="utf-8")
+                        except UnicodeDecodeError:
+                            with open(file_path, 'rb') as f:
+                                result = chardet.detect(f.read(10000))
+                            csv_data = pd.read_csv(file_path, encoding=result['encoding'])
 
-                    # Handle unsupported file types
+                        cleaned_data = clean_data(csv_data)
+                        json_data = cleaned_data.to_json(orient="records")
+                        docs.append(Document(page_content=json_data))
+
                     else:
-                        st.warning(f"Document type {doc_file.type} not supported.")  # Warn user
-                        continue  # Skip unsupported files
+                        st.warning(f"Document type {doc_file.type} not supported.")
+                        continue
 
-                    # Add the file name to the unique sources list
                     unique_sources.add(doc_file.name)
-                    st.session_state.rag_sources = list(unique_sources)  # Update session state
+                    st.session_state.rag_sources = list(unique_sources)
 
                 except Exception as e:
-                    # Log an error if the document fails to process
                     st.error(f"Error processing {doc_file.name}: {e}")
 
-        # If documents were successfully processed
         if docs:
-            # Split and load documents into the vector database
-            _split_and_load_docs(docs)
-            st.toast("Documents loaded successfully.", icon="✅")  # Show success notification
+            # Use _split_and_load_docs to split documents and load into database
+            _split_and_load_docs(docs, chunk_size=128, overlap_size=13)
+            st.toast("Documents loaded successfully.", icon="✅")
         else:
-            # Error message if the document limit is reached
             st.error(f"Maximum number of documents reached ({DB_DOCS_LIMIT}).")
 
 
 
 
-def _split_and_load_docs(docs, max_tokens=800, overlap_tokens=200):
+
+
+
+
+
+def _split_and_load_docs(docs, chunk_size=128, overlap_size=13):
     """
-    Split documents into token-based chunks with overlap and load them into the vector database.
+    Split documents into sequential chunks based on fixed size with optional overlap and load into the vector database.
     """
     chunks = []
 
     for doc in docs:
-        # Approximate token count: 4 characters ≈ 1 token
-        token_multiplier = 4
+        # Tokenize content into fixed-size chunks
+        token_multiplier = 4  # Approximation: 4 characters ≈ 1 token
+        max_char_count = chunk_size * token_multiplier
+        overlap_char_count = overlap_size * token_multiplier
 
-        # Break content into sentences
-        doc_nlp = nlp(doc.page_content)
-        sentences = [sentence.text for sentence in doc_nlp.sents]
+        text = doc.page_content
+        start = 0
 
-        current_chunk = []
-        current_chunk_size = 0
+        while start < len(text):
+            # End index for current chunk
+            end = start + max_char_count
+            chunks.append(text[start:end])
 
-        for sentence in sentences:
-            # Approximate the token count for the sentence
-            sentence_size = len(sentence) // token_multiplier
-
-            # Add sentence to the current chunk
-            if current_chunk_size + sentence_size > max_tokens:
-                # Save the current chunk if it's not empty
-                if current_chunk:
-                    chunks.append(" ".join(current_chunk))
-
-                # Start the next chunk with the overlap
-                overlap_start = max(0, len(current_chunk) - (overlap_tokens // token_multiplier))
-                current_chunk = current_chunk[overlap_start:]
-                current_chunk_size = sum(len(sent) // token_multiplier for sent in current_chunk)
-
-            current_chunk.append(sentence)
-            current_chunk_size += sentence_size
-
-        # Add the remaining chunk
-        if current_chunk:
-            chunks.append(" ".join(current_chunk))
+            # Move the start point with overlap
+            start += max_char_count - overlap_char_count
 
     # Filter out empty chunks
-    chunks = [chunk for chunk in chunks if chunk.strip()]
+    chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
 
     # Store chunks in session state for display
     if "chunked_knowledge" not in st.session_state:
@@ -192,7 +210,7 @@ def _split_and_load_docs(docs, max_tokens=800, overlap_tokens=200):
     st.session_state.chunked_knowledge.extend(chunks)
 
     # Create Document objects for each chunk
-    document_chunks = [Document(page_content=chunk) for chunk in chunks if chunk.strip()]
+    document_chunks = [Document(page_content=chunk) for chunk in chunks]
 
     # Check if vector_db is initialized
     if "vector_db" not in st.session_state or st.session_state.vector_db is None:
@@ -200,6 +218,7 @@ def _split_and_load_docs(docs, max_tokens=800, overlap_tokens=200):
     else:
         st.session_state.vector_db.add_documents(document_chunks)
         st.session_state.vector_db.persist()  # Persist changes to database
+
 
 
 
@@ -216,7 +235,9 @@ def initialize_vector_db(docs):
     os.makedirs("./chroma_db", exist_ok=True)
 
     # Generate embeddings
-    embeddings = OpenAIEmbeddings(api_key=st.session_state.openai_api_key)
+    embeddings = OpenAIEmbeddings(api_key=st.session_state.openai_api_key,
+                                  model="text-embedding-3-small"
+                                )
     document_texts = [doc.page_content for doc in docs]
     try:
         embeddings_data = embeddings.embed_documents(document_texts)
@@ -244,7 +265,7 @@ def initialize_vector_db(docs):
 def _get_context_retriever_chain(vector_db, llm):
     retriever = vector_db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 5}  # Retrieve fewer documents for relevance, 
+        search_kwargs={"k": 3}  # Retrieve fewer documents for relevance, 
                                 # Relevance: Increase k if you want to broaden the scope of retrieved documents.
                                 # Efficiency: Decrease k if performance or relevance sufficiency is a concern.
     )
@@ -267,88 +288,68 @@ def get_conversational_rag_chain(llm):
     retriever_chain = _get_context_retriever_chain(st.session_state.vector_db, llm)
     prompt = ChatPromptTemplate.from_messages([
         ("system", """
-        
 # Role
-You are a highly skilled and knowledgeable AI assistant named Zorro. Your primary role is to assist with Axent-related tasks, but you are also capable of answering general questions or helping with tasks like coding, troubleshooting, and providing explanations in a human-like tonality. Your expertise in Axent's internal processes and your ability to interpret historical faults to provide accurate solutions are crucial to the long-term success of the company.
+- You are a highly skilled and knowledgeable AI assistant named Zorro, designed to provide expert assistance to Axent employees across various departments. Your deep understanding of Axent's products, services, and internal processes allows you to deliver accurate and timely information to support the company's operations. But you also have the added flexability of being a standard claude model for people to interact with, only if their user query or question is not Axent related. Keep responses for these types of questions short and non-detailed, and do not tell them that their request seems unrelated to Axent's business, as they are using you for general use as well, not just Axent related topics.
+- It's extremely important that you answer any question someone gives you about a general question as swiftly as possible, do not say but that "request seems unrelated to Axent's business", simply answer their question, even if it is unrelated to axent. 
+- Your primary focus is to provide accurate answers without referencing where the data is sourced from.
+- Under zero circumstances should you ever start the conversations stating "Based on [insert doucment]" or "according to [insert document]" when retrieving information from the knowledge base, the user should not know where you got the information from unless they specfiically asked you.
+         
+
+# Task
+Assist Axent employees with their queries using the following step-by-step process:
+
+1. Analyze the user's question to determine the type of information they are seeking.
+2. Query the relevant Axent databases to retrieve the necessary data.
+3. If the required information is found in the databases:
+   a. For technical questions & any coding related questions, provide a thorough and accurate answer based on the PCB repair data and the PCB Repair Flowchart.
+   b. For general questions, provide a brief and accurate response in 1-2 sentences.
+4. If the information is not available in the databases, use your extensive knowledge as a Claude model to generate a helpful response based on the context provided.
+5. Present the answer in a clear and professional manner, ensuring that it addresses the user's needs.
+6. Ask the user if they have any additional questions.
+7. If you are unable to retrieve any company-related queries, default back to a normal Claude model and answer as a regular LLM.
 
 {context}
-# Task
-1. When a user sends you a question or a message, always search through the knowledge base using RAG methods to see if there is anything relevant or related that can help the user with their question.
-2. If you are able to retrieve the correct and useful data from the knowledge base, return a message to the user with the correct information as a short and brief summary, and ask the user if they would like more info on the certain topic.
-3. If you are not able to find any relevant data within the knowledge base (such that the user could also be asking an unrelated question to Axent and their internal processes), then proceed to use normal Claude model functionality to help the user with any of their queries.
-4. Kindly ask the user if they would like to ask any more questions or need further clarification.
-5. Finally, before outputing your response, make sure that your response is unique and not simply copy pasted from the knowledge base, it's important to have unique answers that are different everytime, but still capture the same inherit meaning. Finally, do not repeat the same message twice but worded differently when retrieving from the knowledge base.
-6. Never mention anything about the Axent knowledge base, so for example, if someone asks you a question, do not start the conversation by saying "Okay, let me see what I can find in the Axent knowledge base", or anything starting with "Based on...".
-
+         
 # Specifics
-- The Axent knowledge base contains large amounts of data that relates to all of their internal processes. This can include simple questions about certain design topics, knowledge bases where you are able to interpret historical faults to see how they were fixed and recommend similar solutions, certain PCB repair data, etc.
-- Your role as a support agent for Axent is crucial to the long-term success of the company, and it is extremely important that you are able to retrieve relevant information and, where applicable, provide recommendations or solutions as to how certain things can be fixed.
-- When helping employees, use the following PCB repair flowchart to guide them to the right solution more quickly:
-
-A[Visual Inspection  
-Check for damaged components,  
-broken tracks and signs of damage] --> B[Can the PCB be  
-powered up?]  
-B -->|No| C[Use test equipment  
-e.g., Multimeter:
-- Check power rails for shorts  
-- Check fuses for open circuit  
-- Check caps/inductors for shorts  
-- Check resistors for open circuit  
-- Measure resistor values]  
-B -->|Yes| D[Power up PCB]  
-
-C --> E
-E --> F[Is a reference  
-PCB available?]  
-
-F -->|No| G[Check for design  
-similarities]  
-F -->|Yes| H[Check all components and ICs]  
-
-G --> H  
-H --> I[Replace components  
-as required]  
-I --> B  
-
-D --> J[- Check current consumption  
-- Use current limiter  
-- Check PCB for heat  
-- Use FLIR camera for heat spots]  
-J --> K[Check all voltages]  
-
-K --> L[- Measure all test points  
-- Measure regulators, converters  
-- Measure transformers  
-- Measure Vcc on familiar ICs  
-- Check power LED for correct  
-colour]  
-
-L --> M[Run custom tests]  
-
-M --> N[- Check switches, LEDs, etc.  
-- Check displays]  
-
-
-- When providing solutions, focus on general guidance rather than overly specific details. For example, instead of "R319, C161 out of alignment, Reflowed u525," provide advice like "visually inspect all components for proper alignment and reflow as needed."
-- **It's crucial that your responses are concise and to the point.** Avoid long paragraphs and aim for a maximum of 2-3 sentences per response. If the user needs more information, they can always ask follow-up questions.
+- Provide thorough and accurate responses to ensure the smooth operation of the company.
+- Adhere to Axent's data privacy and security policies when accessing employee data.
+- Prioritize timely and detailed responses for critical issues to minimize potential disruptions.
+- Use the PCB Repair Flowchart to guide users through the troubleshooting process step-by-step, offering accurate and concise information. The general steps can be found from Example 1.
+- For PCB repairs, include debugging recommendations and specific cases where others have had the same issue and how they fixed it.
 
 # Context
-Axent is a company that specialises in designing and manufacturing electronic controllers. Their products are used in a wide range of applications, from industrial automation to consumer electronics. As an AI assistant, your role is to support Axent's employees by providing them with accurate and timely information to help them troubleshoot issues, repair PCBs, and optimize their designs.
-- The founder Geoff Fontaine worked at the local cricket centre and had to change the scoreboards manually, so he thought "how can I automate this", and then did just so from his garage.
+- Axent is a premier electronic engineering company, specializing in the design, manufacture, installation and support of visual communication systems for various applications such as innovative road and safety digital signage.
+- Axent specialises in designing and manufacturing innovative road and safety digital signage, including speed, bicycle, and wildlife awareness signs, school zone signs, fire danger rating signs, variable message signs and passenger information display, sporting scoreboards, service station price indicators and carpark displays.
+- The company was founded in 1984 when the current director, Geoff Fontaine, built an electronic scoreboard display from his garage to automate the manual process of updating the scoreboard at the local circket centre that he worked at.
+- As an AI assistant, your primary goal is to support Axent's employees by providing them with quick access to essential information, leveraging Axent's databases and your extensive knowledge base to streamline operations and enhance productivity.
 
-The knowledge base you have access to contains a wealth of information on Axent's internal processes, design guidelines, and historical fault data. By leveraging this information, you can provide valuable insights and recommendations to employees, helping them work more efficiently and effectively.
+# Examples
+## Example 1 - PCB Repair Flow guidelines & Structure:
+Q: How do I fix no heartbeat on a controller?
+A: Based on the repair records, there are several common approaches to resolving a "No HB" (No Heartbeat) issue on Axent controllers:
+1. Check the SD card slot and connection - sometimes a jump wire or resoldering the detect pin can resolve this issue.
+2. Investigate Ram Chips - If the board fails to load the SD card, replacing both RAM chips often helps.
+3. Examine the CPU - a faulty CPU can prevent heartbeat. Replacing the CPU and reflowing surrounding networking resistors has been successful in multiple cases.
+4. Verify debug information - look at the debug port to understand why the PCB isn't booting properly.
+Would you like me to elaborate on any of these troubleshooting steps? The specific solution can depend on the exact board model and symptoms.
 
-Your ability to understand the context of each query and provide relevant, concise answers is essential to the success of Axent's operations. By assisting employees with their day-to-day tasks and helping them overcome challenges, you directly contribute to the company's growth and success.
-         
+## Example 2
+Q: What is Axent?
+A: Axent is a premier electronic engineering company, specializing in the design, manufacture, installation and support of visual communication systems for various applications such as innovative road and safety digital signage.
+
+## Example 3
+Q: Who is the founder of Axent?
+A: The company was founded in 1984 when the current director, Geoff Fontaine, built an electronic scoreboard display from his garage to automate the manual process of updating the scoreboard at the local circket centre that he worked at.
+
 # Notes
-- If the query relates to Axent, prioritise the relevant Axent knowledge base.
-- If the query is unrelated or the knowledge base doesn't contain relevant information, use your general AI capabilities to provide a thoughtful, accurate, and helpful response.
-- Always aim to be concise and professional in your answers.
-- Do not respond to the user by saying "According to the information provided," as it sounds unprofessional and not very human-like.
-- Make sure responses do not use excess tokens if not necessary; answers should be straight to the point, with a maximum of 2-3 sentences."
-- Do not start conversations by saying "According to the information in the knowledge base". This sounds unnatural and kills the user engagement.
-- **Never** mention the specific name of the knowledge base file that you are retrieving information from (if relevant), as this comes off unnatural to the user. Make it seem as though you know everything naturally, and not explictely mentioning that you are retrieving the information from a certain named knowledge base, so, do not say "Based on [insert knowledge base]".
+- Prioritize information retrieved from Axent's databases over general knowledge to ensure the most relevant and accurate answers.
+- If unable to find the required information in the databases, use your Claude knowledge to provide a helpful response based on the available context.
+- Maintain a professional and friendly tone in your interactions with Axent employees.
+- Keep non-technical, generic questions concise, using only 1-2 sentences to provide accurate and relevant information.
+- If users ask general questions, ensure your responses only mention what Axent does at an expected length of 1-2 sentences, and do not mention anything about the founder unless specifically asked.
+- General Query Handling: If a user's query is unrelated to Axent's knowledge base or internal context, respond as a general-purpose AI (Claude model) with accurate and concise information. Keep responses as brief as possible (1-2 sentences) to align with the length and style of Axent-related responses. If the user requires additional details, follow up with a prompt like, "Would you like more information about this topic?" to encourage further dialogue.
+- School signs are not radar activated they just automatically turn on at stipulated times of day.
+- If the user asks a question about the date/what day it is, respond accurately with the current date from the function call, and **not the date from the documents unless specifically asked**, and **do not** mention that you are providing a simulated date based on the context of the conversation.
     """),  # Custom prompt, can modify for better compactness and token efficiency if needed.
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
@@ -359,25 +360,55 @@ Your ability to understand the context of each query and provide relevant, conci
     return create_retrieval_chain(retriever_chain, stuff_documents_chain)
 
 
+def extract_date_from_document(messages):
+    """
+    Extracts the document revision date from the processed document content.
+    """
+    for message in messages:
+        if message.role == "assistant" and "document" in message.content.lower():
+            # Search for dates in the document content
+            import re
+            date_pattern = r'\d{2}/\d{2}/\d{4}'  # Matches dates in DD/MM/YYYY format
+            match = re.search(date_pattern, message.content)
+            if match:
+                return match.group(0)
+    return None
+
 
 def stream_llm_rag_response(llm_stream, messages):
     conversation_rag_chain = get_conversational_rag_chain(llm_stream)
     response_message = ""
-    
-    # Try retrieving relevant results
+
+    # Get the last user message
+    user_message = messages[-1].content.lower()
+
+    # Check if the user is asking for today's date
+    if any(phrase in user_message for phrase in ["current date", "today's date", "date today"]):
+        current_date = get_current_date()
+        response_message = f"Today's date is {current_date}."
+        yield response_message
+        return
+
+    # Check if the user is asking for a document-specific date
+    if "document date" in user_message or "revision date" in user_message:
+        # Fetch document-specific dates if available
+        document_date = extract_date_from_document(messages)  # Custom function to extract document dates
+        if document_date:
+            response_message = f"The document's revision date is {document_date}."
+        else:
+            response_message = "I couldn't find a date in the document."
+        yield response_message
+        return
+
     try:
         # Use the RAG retriever chain
         for chunk in conversation_rag_chain.pick("answer").stream({"messages": messages[:-1], "input": messages[-1].content}):
             response_message += chunk
             yield chunk
     except ValueError:
-        # Fallback to default Claude response
+        # Fallback to standard LLM response
         for chunk in llm_stream.stream(messages):
             response_message += chunk.content
             yield chunk
 
-    # Return the response message
     return response_message
-
-
-

@@ -2,11 +2,16 @@ __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
+
+
+
 import streamlit as st
 import os
 import dotenv
 import uuid
 from langchain_openai import ChatOpenAI
+
+
 
 
 # Importing necessary functions and classes from rag_methods
@@ -59,7 +64,7 @@ if "rag_sources" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {"role": "user", "content": "Hello"},
-        {"role": "assitant", "content": "Hi there by name's Zorro! How can I assist you?"}
+        {"role": "assitant", "content": "Hi, I'm Zorro, your AI companion from Axent! I'm here to help with whatever you need."}
 ]
 
 # Initialise vector_db in session state to avoid AttributeError
@@ -169,18 +174,18 @@ else:
         llm_stream = ChatOpenAI(
             api_key=openai_api_key,
             model_name=st.session_state.model.split("/")[-1],
-            temperature=0.3,
+            temperature=0,
             streaming=True,
-            max_tokens_to_sample=500,  # Set max tokens for OpenAI
+            max_tokens=500
         )
 
     elif model_provider == "anthropic":
         llm_stream = ChatAnthropic(
             api_key = anthropic_api_key,
             model=st.session_state.model.split("/")[-1],
-            temperature=0.3,
+            temperature=0,
             streaming=True,
-            max_tokens_to_sample=500,  # Set max tokens for Anthropic
+            max_tokens=500
         )
 
     for message in st.session_state.messages:
@@ -192,14 +197,6 @@ else:
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Check if the input contains a code snippet
-        if "```" in prompt or any(line.strip().startswith("from") or line.strip().startswith("import") for line in prompt.splitlines()):
-            # Automatically assume the user is asking for code assistance
-            response_prompt = f"Please comment on this code:\n{prompt}"
-        else:
-            # Use the input as-is for general conversation
-            response_prompt = prompt
-
         # Generate the assistant's response
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
@@ -208,7 +205,7 @@ else:
             # Create messages for query
             messages = [
                 HumanMessage(content=m["content"]) if m["role"] == "user" else AIMessage(content=m["content"])
-                for m in st.session_state.messages
+                for m in st.session_state.messages[-5:]
             ]
 
             if st.session_state.vector_db:
@@ -217,5 +214,12 @@ else:
                     full_response += chunk
                     message_placeholder.markdown(full_response)
 
+            else:
+                # Fallback to standard model
+                for chunk in llm_stream.stream(messages):
+                    full_response += chunk.content
+                    message_placeholder.markdown(full_response)
+
             # Save the response in session state
             st.session_state.messages.append({"role": "assistant", "content": full_response})
+
