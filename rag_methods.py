@@ -49,7 +49,6 @@ def extract_text_from_pdf(file_path):
             for page in pdf.pages:
                 # Extract words and bounding box data
                 page_text = page.extract_text()
-                words = page.extract_words()
                 tables = page.extract_tables()
 
                 # Initialize content for the page
@@ -76,8 +75,8 @@ def extract_text_from_pdf(file_path):
 
                 # Process tables left-to-right
                 for table in tables:
-                    # Flatten table rows into a readable format
-                    table_data = [" | ".join(row) for row in table if any(row)]
+                    # Handle None values in table rows and flatten into a readable format
+                    table_data = [" | ".join([str(cell) if cell is not None else "" for cell in row]) for row in table if any(row)]
                     if current_section:
                         current_section["content"].append({"type": "table", "rows": table_data})
                     else:
@@ -93,6 +92,7 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Failed to extract structured content from PDF: {e}")
         return json.dumps({"error": str(e)}, indent=4)
+
 
 
 
