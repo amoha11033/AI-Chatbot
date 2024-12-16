@@ -36,7 +36,7 @@ import pdfplumber
 import re
 import logging
 
-def extract_text_with_plain_output(file_path):
+def extract_text_from_pdf(file_path):
     """
     Extract text, headers, and nested content from a PDF document,
     properly distinguishing between headings and subheadings,
