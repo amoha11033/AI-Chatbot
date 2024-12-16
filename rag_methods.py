@@ -34,10 +34,9 @@ def get_current_date():
 
 import pdfplumber
 import re
-import json
 import logging
 
-def extract_text_from_pdf(file_path):
+def extract_text_with_plain_output(file_path):
     """
     Extract text, headers, and nested content from a PDF document,
     properly distinguishing between headings and subheadings,
@@ -55,21 +54,25 @@ def extract_text_from_pdf(file_path):
             
             # Add to the appropriate parent
             if hierarchy_stack:
-                hierarchy_stack[-1]["content"].append(item)
+                # Ensure the parent is a dictionary
+                if isinstance(hierarchy_stack[-1], dict):
+                    hierarchy_stack[-1]["content"].append(item)
             else:
                 content.append(item)
 
             # Add the current item to the stack
-            hierarchy_stack.append(item)
+            if isinstance(item, dict):  # Only add dictionaries to the hierarchy stack
+                hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
             """Convert a structured item into a readable plain text format."""
-            output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
-            for subitem in item.get("content", []):
-                if isinstance(subitem, dict):
+            if isinstance(item, dict):
+                output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
+                for subitem in item.get("content", []):
                     output += format_hierarchy(subitem, level + 1)
-                else:
-                    output += "  " * (level + 1) + f"- {subitem}\n"
+            else:
+                # Handle plain strings (e.g., steps or paragraphs)
+                output = "  " * level + f"- {item}\n"
             return output
 
         with pdfplumber.open(file_path) as pdf:
@@ -104,14 +107,14 @@ def extract_text_from_pdf(file_path):
                                 break
                             step_text += " " + next_line
                         # Add the step to the nearest subheading or heading
-                        if hierarchy_stack:
+                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(step_text)
                         else:
                             content.append(step_text)
 
                     # Default paragraph or content
                     else:
-                        if hierarchy_stack:
+                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(line)
                         else:
                             content.append(line)
@@ -125,6 +128,7 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Error processing PDF document {file_path}: {e}")
         return f"Error: {str(e)}"
+
 
 
 
