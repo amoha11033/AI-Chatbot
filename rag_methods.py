@@ -38,9 +38,9 @@ import logging
 
 def extract_text_from_pdf(file_path):
     """
-    Extract text, headers, and nested content from a PDF document,
+    Extract text, headers, tables, and nested content from a PDF document,
     properly distinguishing between headings and subheadings,
-    and return a plain text representation.
+    and returning a plain text representation with formatted tables.
     """
     try:
         content = []
@@ -48,20 +48,17 @@ def extract_text_from_pdf(file_path):
 
         def add_to_hierarchy(item, level):
             """Add a new item to the correct level in the hierarchy."""
-            # Remove items from the stack if they are deeper than the current level
             while len(hierarchy_stack) > level:
                 hierarchy_stack.pop()
             
             # Add to the appropriate parent
             if hierarchy_stack:
-                # Ensure the parent is a dictionary
                 if isinstance(hierarchy_stack[-1], dict):
                     hierarchy_stack[-1]["content"].append(item)
             else:
                 content.append(item)
 
-            # Add the current item to the stack
-            if isinstance(item, dict):  # Only add dictionaries to the hierarchy stack
+            if isinstance(item, dict):  # Only add dictionaries to the stack
                 hierarchy_stack.append(item)
 
         def format_hierarchy(item, level=0):
@@ -70,8 +67,11 @@ def extract_text_from_pdf(file_path):
                 output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
                 for subitem in item.get("content", []):
                     output += format_hierarchy(subitem, level + 1)
+            elif isinstance(item, list):  # Handle table formatting
+                output = "  " * level + "Table:\n"
+                for row in item:
+                    output += "  " * (level + 1) + " | ".join(row) + "\n"
             else:
-                # Handle plain strings (e.g., steps or paragraphs)
                 output = "  " * level + f"- {item}\n"
             return output
 
@@ -119,6 +119,16 @@ def extract_text_from_pdf(file_path):
                         else:
                             content.append(line)
 
+                # Extract and format tables
+                tables = page.extract_tables()
+                for table in tables:
+                    if table:
+                        formatted_table = [[cell.strip() if cell else "" for cell in row] for row in table]
+                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
+                            hierarchy_stack[-1]["content"].append(formatted_table)
+                        else:
+                            content.append(formatted_table)
+
         # Format the output as plain text
         plain_text_output = ""
         for item in content:
@@ -128,6 +138,7 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Error processing PDF document {file_path}: {e}")
         return f"Error: {str(e)}"
+
 
 
 
