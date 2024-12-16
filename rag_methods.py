@@ -39,12 +39,12 @@ import logging
 def extract_text_from_pdf(file_path):
     """
     Extract text, headers, tables, and nested content from a PDF document,
-    properly distinguishing between headings and tables.
+    ensuring table content is processed first and plain text duplicates are skipped.
     """
     try:
         content = []
         hierarchy_stack = []  # Stack to track the current hierarchy
-        in_table = False  # Flag to check if content is part of a table
+        table_text_set = set()  # To store table content and prevent duplicates
 
         def add_to_hierarchy(item, level):
             """Add a new item to the correct level in the hierarchy."""
@@ -77,6 +77,25 @@ def extract_text_from_pdf(file_path):
 
         with pdfplumber.open(file_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
+                tables = page.extract_tables()
+
+                # Extract and process tables first
+                for table in tables:
+                    if table:
+                        formatted_table = [
+                            [cell.strip() if cell else "" for cell in row] for row in table
+                        ]
+                        # Add table rows to the text set to avoid duplication
+                        for row in formatted_table:
+                            table_text_set.update(row)
+                        
+                        # Add the table under the nearest heading or subheading
+                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
+                            hierarchy_stack[-1]["content"].append(formatted_table)
+                        else:
+                            content.append(formatted_table)
+
+                # Extract plain text lines
                 page_content = page.extract_text()
                 if not page_content:
                     continue  # Skip pages with no text
@@ -84,42 +103,25 @@ def extract_text_from_pdf(file_path):
                 lines = page_content.splitlines()
                 for line in lines:
                     line = line.strip()
-                    if not line:
-                        continue  # Skip empty lines
+                    if not line or line in table_text_set:
+                        continue  # Skip empty lines or duplicates from table
 
                     # Check for major headings (uppercase or ending with colon)
-                    if not in_table and (line.isupper() or line.endswith(":")):
+                    if line.isupper() or line.endswith(":"):
                         major_heading = {"type": "heading", "text": line, "content": []}
                         add_to_hierarchy(major_heading, 1)
 
                     # Check for subheadings (title case or indented)
-                    elif not in_table and line.istitle():
+                    elif line.istitle():
                         subheading = {"type": "subheading", "text": line, "content": []}
                         add_to_hierarchy(subheading, 2)
 
                     # Default paragraph or content
-                    elif not in_table:
+                    else:
                         if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
                             hierarchy_stack[-1]["content"].append(line)
                         else:
                             content.append(line)
-
-                # Extract and process tables
-                tables = page.extract_tables()
-                for table in tables:
-                    if table:
-                        in_table = True  # Mark table start
-                        formatted_table = [
-                            [cell.strip() if cell else "" for cell in row] for row in table
-                        ]
-
-                        # Add the table under the nearest heading or subheading
-                        if hierarchy_stack and isinstance(hierarchy_stack[-1], dict):
-                            hierarchy_stack[-1]["content"].append(formatted_table)
-                        else:
-                            content.append(formatted_table)
-
-                        in_table = False  # Reset table flag
 
         # Format the output as plain text
         plain_text_output = ""
@@ -130,6 +132,7 @@ def extract_text_from_pdf(file_path):
     except Exception as e:
         logging.error(f"Error processing PDF document {file_path}: {e}")
         return f"Error: {str(e)}"
+
 
 
 
