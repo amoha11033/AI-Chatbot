@@ -37,7 +37,7 @@ import json
 import logging
 import re
 
-def extract_pdf_content_with_tables(file_path):
+def extract_text_from_pdf(file_path):
     """
     Extract structured text and tables from a PDF, associating tables with sections and processing them left-to-right.
     """
