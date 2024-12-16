@@ -33,10 +33,14 @@ def get_current_date():
 
 
 import pdfplumber
+import json
+import logging
+import re
 
-def extract_text_from_pdf(file_path):
+def extract_text_and_tables_from_pdf(file_path):
     """
-    Extract text from a PDF file in a cleaner, structured format.
+    Extract headings, text, and tables from a PDF in a structured format.
+    Tables are processed left to right, and grouped under relevant headings.
     """
     try:
         content = []
@@ -44,42 +48,46 @@ def extract_text_from_pdf(file_path):
 
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
-                # Extract text by page, retaining layout if needed
+                # Extract tables from the page
+                tables = page.extract_tables()
+
+                # Extract lines of text from the page
                 page_text = page.extract_text()
+                lines = page_text.splitlines() if page_text else []
 
-                if not page_text:
-                    continue
-
-                # Split the text into lines
-                lines = page_text.splitlines()
-
+                # Process text and tables in order of appearance
                 for line in lines:
                     text = line.strip()
 
-                    # Example heuristic for headings (all uppercase or bold)
+                    # Example heuristic for headings (all-uppercase with limited words)
                     if text.isupper() and len(text.split()) < 10:
                         if current_section and "content" in current_section and current_section["content"]:
                             content.append(current_section)
                         current_section = {"type": "heading", "text": text, "content": []}
-                    else:
-                        # Treat everything else as text
-                        if not current_section:
-                            current_section = {"type": "text", "content": []}
-                        if current_section["type"] == "text":
-                            current_section["content"].append(text)
-                        else:
-                            content.append(current_section)
-                            current_section = {"type": "text", "content": [text]}
+                    elif current_section and text:
+                        # Add text to the current section
+                        current_section["content"].append({"type": "text", "text": text})
 
-        # Add the last section if any
-        if current_section and "content" in current_section and current_section["content"]:
-            content.append(current_section)
+                # Process tables after text
+                for table in tables:
+                    # Flatten table rows into a readable format
+                    table_data = [" | ".join(row) for row in table if any(row)]
+                    if current_section:
+                        current_section["content"].append({"type": "table", "rows": table_data})
+                    else:
+                        # If no current heading, append table as standalone content
+                        content.append({"type": "table", "rows": table_data})
+
+            # Append the last section if it exists
+            if current_section and "content" in current_section and current_section["content"]:
+                content.append(current_section)
 
         return json.dumps(content, indent=4)
 
     except Exception as e:
-        logging.error(f"Failed to extract text from PDF: {e}")
+        logging.error(f"Failed to extract text and tables from PDF: {e}")
         return json.dumps({"error": str(e)}, indent=4)
+
 
 
     
