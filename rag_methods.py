@@ -40,7 +40,8 @@ import logging
 def extract_text_from_pdf(file_path):
     """
     Extract text, headers, and nested content from a PDF document,
-    properly distinguishing between headings and subheadings.
+    properly distinguishing between headings and subheadings,
+    and return a plain text representation.
     """
     try:
         content = []
@@ -60,6 +61,16 @@ def extract_text_from_pdf(file_path):
 
             # Add the current item to the stack
             hierarchy_stack.append(item)
+
+        def format_hierarchy(item, level=0):
+            """Convert a structured item into a readable plain text format."""
+            output = "  " * level + f"{item['type'].capitalize()}: {item['text']}\n"
+            for subitem in item.get("content", []):
+                if isinstance(subitem, dict):
+                    output += format_hierarchy(subitem, level + 1)
+                else:
+                    output += "  " * (level + 1) + f"- {subitem}\n"
+            return output
 
         with pdfplumber.open(file_path) as pdf:
             for page_num, page in enumerate(pdf.pages):
@@ -105,10 +116,15 @@ def extract_text_from_pdf(file_path):
                         else:
                             content.append(line)
 
-        return json.dumps(content, indent=4)
+        # Format the output as plain text
+        plain_text_output = ""
+        for item in content:
+            plain_text_output += format_hierarchy(item)
+
+        return plain_text_output
     except Exception as e:
         logging.error(f"Error processing PDF document {file_path}: {e}")
-        return json.dumps({"error": str(e)}, indent=4)
+        return f"Error: {str(e)}"
 
 
 
@@ -240,7 +256,7 @@ def load_doc_to_db():
 
         if docs:
             # Use _split_and_load_docs to split documents and load into database
-            _split_and_load_docs(docs, chunk_size=128, overlap_size=13)
+            _split_and_load_docs(docs, chunk_size=256, overlap_size=25)
             st.toast("Documents loaded successfully.", icon="✅")
         else:
             st.error(f"Maximum number of documents reached ({DB_DOCS_LIMIT}).")
@@ -253,7 +269,7 @@ def load_doc_to_db():
 
 
 
-def _split_and_load_docs(docs, chunk_size=128, overlap_size=13):
+def _split_and_load_docs(docs, chunk_size=256, overlap_size=25):
     """
     Split documents into sequential chunks based on fixed size with optional overlap and load into the vector database.
     """
