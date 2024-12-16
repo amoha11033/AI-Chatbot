@@ -33,7 +33,7 @@ def get_current_date():
 
 
 
-def extract_text_by_page(file_path):
+def extract_text_from_pdf(file_path):
     """
     Extract text from a PDF file, page by page.
     """
