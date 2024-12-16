@@ -270,7 +270,7 @@ def initialize_vector_db(docs):
 def _get_context_retriever_chain(vector_db, llm):
     retriever = vector_db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 3}  # Retrieve fewer documents for relevance, 
+        search_kwargs={"k": 5}  # Retrieve fewer documents for relevance, 
                                 # Relevance: Increase k if you want to broaden the scope of retrieved documents.
                                 # Efficiency: Decrease k if performance or relevance sufficiency is a concern.
     )
