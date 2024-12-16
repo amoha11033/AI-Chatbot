@@ -32,38 +32,109 @@ def get_current_date():
     return datetime.now().strftime("%B %d, %Y")
 
 
+import pdfplumber
 import json
+import re
 import logging
 
 def extract_text_from_pdf(file_path):
-    """Extract text from a Word document, including headings, paragraphs, and tables."""
+    """
+    Extract text, headers, subheadings, and content from a PDF document,
+    dynamically nesting headings based on their hierarchy.
+    """
     try:
-        doc = PdfReader(file_path)
         content = []
-        current_section = None
+        hierarchy_stack = []  # Stack to track the current hierarchy of headings
+        step_pattern = re.compile(r'^\d+\s')  # Detect lines starting with step numbers like "1 "
 
-        for paragraph in doc.paragraphs:
-            text = paragraph.text.strip()
-            if text:
-                if paragraph.style.name.startswith('Heading'):
-                    if current_section and "content" in current_section and current_section["content"]:
-                        content.append(current_section)
-                    current_section = {"type": "heading", "text": text, "content": []}
-                else:
-                    if not current_section:
-                        current_section = {"type": "text", "content": []}
-                    if current_section["type"] == "text":
-                        current_section["content"].append(text)
+        def add_to_hierarchy(item):
+            """Add a new item to the correct level in the hierarchy."""
+            while hierarchy_stack and hierarchy_stack[-1]["type"] == "subheading":
+                hierarchy_stack[-1]["content"].append(item)
+                return
+            if hierarchy_stack:
+                hierarchy_stack[-1]["content"].append(item)
+            else:
+                content.append(item)
+
+        with pdfplumber.open(file_path) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                page_content = page.extract_text()
+                if not page_content:
+                    continue  # Skip pages with no text
+
+                lines = page_content.splitlines()
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue  # Skip empty lines
+
+                    # Check for major headings (uppercase or ending with colon)
+                    if line.isupper() or line.endswith(":"):
+                        # Create a new major heading
+                        major_heading = {"type": "heading", "text": line, "content": []}
+
+                        # Pop smaller headings from the stack
+                        while hierarchy_stack and hierarchy_stack[-1]["type"] == "subheading":
+                            hierarchy_stack.pop()
+
+                        # Add the major heading to the stack and to the content
+                        add_to_hierarchy(major_heading)
+                        hierarchy_stack.append(major_heading)
+
+                    # Check for subheadings (title case or smaller hierarchy)
+                    elif line.istitle():
+                        # Create a subheading
+                        subheading = {"type": "subheading", "text": line, "content": []}
+
+                        # Add subheading under the last heading in the stack
+                        if hierarchy_stack:
+                            hierarchy_stack[-1]["content"].append(subheading)
+                        else:
+                            content.append(subheading)
+
+                        # Add subheading to the stack
+                        hierarchy_stack.append(subheading)
+
+                    # Detect steps using step numbers
+                    elif step_pattern.match(line):
+                        step_text = line
+                        while lines:  # Combine multi-line steps
+                            next_line = lines.pop(0).strip()
+                            if not next_line or step_pattern.match(next_line):
+                                lines.insert(0, next_line)
+                                break
+                            step_text += " " + next_line
+
+                        # Add step to the correct level
+                        if hierarchy_stack:
+                            hierarchy_stack[-1]["content"].append(step_text)
+                        else:
+                            content.append(step_text)
+
+                    # Default paragraph or text content
                     else:
-                        content.append(current_section)
-                        current_section = {"type": "text", "content": [text]}
+                        if hierarchy_stack:
+                            hierarchy_stack[-1]["content"].append(line)
+                        else:
+                            content.append(line)
 
-        if current_section and "content" in current_section and current_section["content"]:
-            content.append(current_section)
+                # Extract tables from the page
+                tables = page.extract_tables()
+                for table in tables:
+                    table_data = []
+                    for row in table:
+                        if row:  # Ensure row is not empty
+                            table_data.append([cell.strip() if cell else "" for cell in row])
+                    if table_data:
+                        if hierarchy_stack:
+                            hierarchy_stack[-1]["content"].append({"type": "table", "data": table_data})
+                        else:
+                            content.append({"type": "table", "data": table_data})
 
         return json.dumps(content, indent=4)
     except Exception as e:
-        logging.error(f"Error processing Word document {file_path}: {e}")
+        logging.error(f"Error processing PDF document {file_path}: {e}")
         return json.dumps({"error": str(e)}, indent=4)
 
 
