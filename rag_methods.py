@@ -262,7 +262,7 @@ def initialize_vector_db(docs):
 def _get_context_retriever_chain(vector_db, llm):
     retriever = vector_db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 5}  # Retrieve fewer documents for relevance, 
+        search_kwargs={"k": 8}  # Retrieve fewer documents for relevance, 
                                 # Relevance: Increase k if you want to broaden the scope of retrieved documents.
                                 # Efficiency: Decrease k if performance or relevance sufficiency is a concern.
     )
@@ -270,7 +270,7 @@ def _get_context_retriever_chain(vector_db, llm):
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
-        ("system", "Use the retrieved knowledge to craft a relevant response."),
+        ("system", "Use the retrieved knowledge to craft a relevant response. Ensure that your answer matches the most relevant user query, check for similar words for unique meanings."),
     ])
 
     retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
