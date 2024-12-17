@@ -270,20 +270,7 @@ def _get_context_retriever_chain(vector_db, llm):
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
-        ("system", """You are a specialized AI assistant tasked with delivering highly detailed and contextually relevant responses. 
-Follow these guidelines:
-
-1. **Comprehend Query**: Fully analyze the user's question to ensure no critical details are overlooked.
-2. **Search Relevance**: Retrieve the most contextually appropriate and complete information from the vector database.
-3. **Contextual Linking**: If relevant, connect the retrieved knowledge to related concepts.
-4. **Precision**: Always include specific measurements, references, or examples.
-5. **Fallback**: If exact matches are unavailable, tell the user that you don't know the answer, do not guess an answer, as this is incorrect.
-6. **Consistency**: Keep answers precise, complete, and consistent in tone and format.
-7. **Structure**: Format responses clearly with headings, bullet points, or steps, where applicable.
-
-When answering:
-- Use clear and technical language for Axent-related queries.
-- For general questions, respond briefly and directly with factual information."""),
+        ("system", "Use the retrieved knowledge to craft a relevant response."),
     ])
 
     retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
