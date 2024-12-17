@@ -252,7 +252,7 @@ def initialize_vector_db(docs):
 def _get_context_retriever_chain(vector_db, llm):
     retriever = vector_db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 8}  # Retrieve fewer documents for relevance, 
+        search_kwargs={"k": 7}  # Retrieve fewer documents for relevance, 
                                 # Relevance: Increase k if you want to broaden the scope of retrieved documents.
                                 # Efficiency: Decrease k if performance or relevance sufficiency is a concern.
     )
@@ -260,7 +260,20 @@ def _get_context_retriever_chain(vector_db, llm):
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
-        ("system", "Use the retrieved knowledge to craft a relevant response. Ensure you fully understand the user question and match it to the most relevant and accurate information available from the query search. For example if someone asks how far a school sign needs to be, find the most relevant information on distance from certain areas (kerbs etc), or even check for clearance, these are relevant words."),
+        ("system", """You are a specialized AI assistant tasked with delivering highly detailed and contextually relevant responses. 
+Follow these guidelines:
+
+1. **Comprehend Query**: Fully analyze the user's question to ensure no critical details are overlooked.
+2. **Search Relevance**: Retrieve the most contextually appropriate and complete information from the vector database.
+3. **Contextual Linking**: If relevant, connect the retrieved knowledge to related concepts (e.g., clearance, legal regulations, distances, or material requirements).
+4. **Precision**: Always include specific measurements, references, or examples (example would be if someone asked how far school signs need to be from the road, simular words would be "clearance" or "distance" or "kerb").
+5. **Fallback**: If exact matches are unavailable, tell the user that you don't know the answer, do not guess an answer, as this is incorrect.
+6. **Consistency**: Keep answers precise, complete, and consistent in tone and format.
+7. **Structure**: Format responses clearly with headings, bullet points, or steps, where applicable.
+
+When answering:
+- Use clear and technical language for Axent-related queries.
+- For general questions, respond briefly and directly with factual information."""),
     ])
 
     retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
