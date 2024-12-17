@@ -50,16 +50,19 @@ def extract_text_from_pdf(file_path):
 import mammoth
 
 def extract_text_from_docx(file_path):
-    """Convert a Word document to Markdown using Mammoth."""
+    """
+    Extract text from a DOCX file using Mammoth while skipping images.
+    """
     try:
         with open(file_path, "rb") as docx_file:
-            result = mammoth.convert_to_markdown(docx_file)
-            markdown = result.value  # The generated Markdown
-            messages = result.messages  # Any warnings or messages
-            return markdown
+            result = mammoth.convert_to_markdown(
+                docx_file,
+                convert_image=lambda image: ""  # Skip images
+            )
+            return result.value  # Return the extracted Markdown text
     except Exception as e:
-        print(f"Error: {e}")
-        return None
+        st.error(f"Error extracting text from DOCX file: {e}")
+        return ""
 
 
 def clean_data(dataframe):
