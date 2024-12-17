@@ -69,6 +69,7 @@ def clean_data(dataframe):
     - Filling NaN values with a placeholder.
     - Removing duplicate rows.
     - Resetting the index.
+    - Adding a comma after non-empty cell values for formatting.
     """
     # Drop rows/columns with more than 50% NaN values
     dataframe = dataframe.dropna(thresh=dataframe.shape[1] * 0.5, axis=0)
@@ -82,7 +83,11 @@ def clean_data(dataframe):
     # Reset the index
     dataframe.reset_index(drop=True, inplace=True)
     
+    # Add a comma after every non-empty cell value
+    dataframe = dataframe.applymap(lambda x: f"{x}," if x.strip() else x)
+    
     return dataframe
+
 
 import chardet
 
