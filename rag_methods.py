@@ -49,7 +49,7 @@ def extract_text_from_pdf(file_path):
 
 import mammoth
 
-def convert_text_from_docx(file_path):
+def extract_text_from_docx(file_path):
     """Convert a Word document to Markdown using Mammoth."""
     try:
         with open(file_path, "rb") as docx_file:
