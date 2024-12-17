@@ -12,7 +12,6 @@ from langchain.schema import Document
 import logging
 from PyPDF2 import PdfReader
 from docx import Document as DocxDocument
-import json
 
 
 
@@ -48,47 +47,19 @@ def extract_text_from_pdf(file_path):
 
     
 
-from docx import Document as DocxDocument
-import logging
+import mammoth
 
-def extract_text_from_docx(file_path):
-    """Extract text from a Word document and convert it into Markdown format."""
+def convert_text_from_docx(file_path):
+    """Convert a Word document to Markdown using Mammoth."""
     try:
-        doc = DocxDocument(file_path)
-        markdown_content = []
-        
-        # Extract paragraphs and tables
-        for paragraph in doc.paragraphs:
-            text = paragraph.text.strip()
-            if text:
-                if paragraph.style.name.startswith('Heading'):
-                    # Convert headings to Markdown (e.g., ## for Heading 2)
-                    heading_level = int(paragraph.style.name[-1]) if paragraph.style.name[-1].isdigit() else 1
-                    markdown_content.append(f"{'#' * heading_level} {text}")
-                else:
-                    markdown_content.append(text)
-        
-        # Extract tables
-        for table in doc.tables:
-            table_rows = []
-            for row in table.rows:
-                row_data = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
-                table_rows.append(row_data)
-            
-            # Convert table data to Markdown format
-            if table_rows:
-                header = "| " + " | ".join(table_rows[0]) + " |"
-                separator = "| " + " | ".join(['---'] * len(table_rows[0])) + " |"
-                markdown_table = [header, separator]
-                for row in table_rows[1:]:
-                    markdown_table.append("| " + " | ".join(row) + " |")
-                markdown_content.append("\n".join(markdown_table))
-
-        return "\n\n".join(markdown_content)
+        with open(file_path, "rb") as docx_file:
+            result = mammoth.convert_to_markdown(docx_file)
+            markdown = result.value  # The generated Markdown
+            messages = result.messages  # Any warnings or messages
+            return markdown
     except Exception as e:
-        logging.error(f"Error processing Word document {file_path}: {e}")
-        return f"Error: {e}"
-
+        print(f"Error: {e}")
+        return None
 
 
 def clean_data(dataframe):
@@ -281,7 +252,7 @@ def initialize_vector_db(docs):
 def _get_context_retriever_chain(vector_db, llm):
     retriever = vector_db.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 5}  # Retrieve fewer documents for relevance, 
+        search_kwargs={"k": 3}  # Retrieve fewer documents for relevance, 
                                 # Relevance: Increase k if you want to broaden the scope of retrieved documents.
                                 # Efficiency: Decrease k if performance or relevance sufficiency is a concern.
     )
