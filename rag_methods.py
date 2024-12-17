@@ -83,10 +83,11 @@ def clean_data(dataframe):
     # Reset the index
     dataframe.reset_index(drop=True, inplace=True)
     
-    # Add a comma after every non-empty cell value
-    dataframe = dataframe.applymap(lambda x: f"{x}," if x.strip() else x)
+    # Add a comma after every non-empty cell value (convert all to strings first)
+    dataframe = dataframe.applymap(lambda x: f"{str(x).strip()}," if str(x).strip() else "")
     
     return dataframe
+
 
 
 import chardet
@@ -132,7 +133,7 @@ def load_doc_to_db():
                         cleaned_data = clean_data(excel_data)
                         json_data = cleaned_data.to_json(orient="records")
                         docs.append(Document(page_content=json_data))
-
+                    
                     elif doc_file.name.endswith(".csv"):
                         try:
                             csv_data = pd.read_csv(file_path, encoding="utf-8")
@@ -140,10 +141,11 @@ def load_doc_to_db():
                             with open(file_path, 'rb') as f:
                                 result = chardet.detect(f.read(10000))
                             csv_data = pd.read_csv(file_path, encoding=result['encoding'])
-
+                        
                         cleaned_data = clean_data(csv_data)
                         json_data = cleaned_data.to_json(orient="records")
                         docs.append(Document(page_content=json_data))
+
 
                     else:
                         st.warning(f"Document type {doc_file.type} not supported.")
