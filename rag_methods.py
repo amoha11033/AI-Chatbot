@@ -260,7 +260,7 @@ def _get_context_retriever_chain(vector_db, llm):
     prompt = ChatPromptTemplate.from_messages([
         MessagesPlaceholder(variable_name="messages"),
         ("user", "{input}"),
-        ("system", "Use the retrieved knowledge to craft a relevant response."),
+        ("system", "Use the retrieved knowledge to craft a relevant response. Ensure you fully understand the user question and match it to the most relevant and accurate information available from the query search. For example if someone asks how far a school sign needs to be, find the most relevant information on distance from certain areas (kerbs etc), or even check for clearance, these are relevant words."),
     ])
 
     retriever_chain = create_history_aware_retriever(llm, retriever, prompt)
