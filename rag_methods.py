@@ -48,36 +48,47 @@ def extract_text_from_pdf(file_path):
 
     
 
+from docx import Document as DocxDocument
+import logging
+
 def extract_text_from_docx(file_path):
-    """Extract text from a Word document, including headings, paragraphs, and tables."""
+    """Extract text from a Word document and convert it into Markdown format."""
     try:
         doc = DocxDocument(file_path)
-        content = []
-        current_section = None
-
+        markdown_content = []
+        
+        # Extract paragraphs and tables
         for paragraph in doc.paragraphs:
             text = paragraph.text.strip()
             if text:
                 if paragraph.style.name.startswith('Heading'):
-                    if current_section and "content" in current_section and current_section["content"]:
-                        content.append(current_section)
-                    current_section = {"type": "heading", "text": text, "content": []}
+                    # Convert headings to Markdown (e.g., ## for Heading 2)
+                    heading_level = int(paragraph.style.name[-1]) if paragraph.style.name[-1].isdigit() else 1
+                    markdown_content.append(f"{'#' * heading_level} {text}")
                 else:
-                    if not current_section:
-                        current_section = {"type": "text", "content": []}
-                    if current_section["type"] == "text":
-                        current_section["content"].append(text)
-                    else:
-                        content.append(current_section)
-                        current_section = {"type": "text", "content": [text]}
+                    markdown_content.append(text)
+        
+        # Extract tables
+        for table in doc.tables:
+            table_rows = []
+            for row in table.rows:
+                row_data = [cell.text.strip().replace('\n', ' ') for cell in row.cells]
+                table_rows.append(row_data)
+            
+            # Convert table data to Markdown format
+            if table_rows:
+                header = "| " + " | ".join(table_rows[0]) + " |"
+                separator = "| " + " | ".join(['---'] * len(table_rows[0])) + " |"
+                markdown_table = [header, separator]
+                for row in table_rows[1:]:
+                    markdown_table.append("| " + " | ".join(row) + " |")
+                markdown_content.append("\n".join(markdown_table))
 
-        if current_section and "content" in current_section and current_section["content"]:
-            content.append(current_section)
-
-        return json.dumps(content, indent=4)
+        return "\n\n".join(markdown_content)
     except Exception as e:
         logging.error(f"Error processing Word document {file_path}: {e}")
-        return json.dumps({"error": str(e)}, indent=4)
+        return f"Error: {e}"
+
 
 
 def clean_data(dataframe):
